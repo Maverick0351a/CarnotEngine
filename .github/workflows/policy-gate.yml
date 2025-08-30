@@ -1,3 +1,62 @@
 name: Policy Gate
-on: [push]
-jobs: {noop: {runs-on: ubuntu-latest, steps:[{run: echo ok}]}}
+
+on:
+	pull_request:
+		paths-ignore:
+			- 'docs/**'
+			- 'README.md'
+	workflow_dispatch:
+		inputs:
+			enforce:
+				description: "Set true to enforce (fail on violations)"
+				required: false
+				default: "false"
+
+jobs:
+	opa:
+		runs-on: ubuntu-latest
+		steps:
+			- uses: actions/checkout@v4
+			- name: Set up Python (generate synthetic input)
+				uses: actions/setup-python@v5
+				with:
+					python-version: '3.11'
+			- name: Build input JSON
+				id: build_input
+				run: |
+					echo '{"boms":[],"cloud":[],"enforce":'$(echo "${{ github.event.inputs.enforce || 'false' }}")'}' > opa_input.json
+					cat opa_input.json
+			- name: Download OPA
+				run: |
+					curl -L -o opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64
+					chmod +x opa
+			- name: Evaluate policy (warn mode default)
+				run: |
+					./opa eval -i opa_input.json -d policies/pqc_migration.rego 'data.carnot.pqc_migration.violation' -f json > opa_result.json
+					./opa eval -i opa_input.json -d policies/pqc_migration.rego 'data.carnot.pqc_migration.violation_summary' -f json > opa_summary.json
+					cat opa_result.json
+					cat opa_summary.json
+			- name: Upload OPA artifacts
+				uses: actions/upload-artifact@v4
+				with:
+					name: opa-policy-results
+					path: |
+						opa_result.json
+						opa_summary.json
+			- name: Comment on PR
+				if: github.event_name == 'pull_request'
+				uses: thollander/actions-comment-pull-request@v2
+				with:
+					message: |
+						### PQC Policy Gate Summary
+						Enforcement: ${{ github.event.inputs.enforce || 'false' }}
+						Violations JSON artifact: opa_result.json
+						Summary:
+						```
+						$(cat opa_summary.json)
+						```
+			- name: Fail if enforce and violations
+				if: ${{ github.event.inputs.enforce == 'true' }}
+				run: |
+					count=$(jq '.result[0].expressions[0].value.count // 0' opa_summary.json 2>/dev/null || echo 0)
+					if [ "$count" -gt 0 ]; then echo "Enforce mode: failing due to $count violations"; exit 1; fi

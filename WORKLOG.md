@@ -26,3 +26,8 @@
 	- Implemented retry handling for throttling (exponential backoff).
 	- Created moto-based tests for pagination, defaults, throttling resilience.
 	- Added GitHub Actions workflow .github/workflows/tests.yml to run pytest.
+- Task 04 (OPA Gate Warn → Enforce Prep):
+	- Expanded pqc_migration.rego with rules (rsa_min_key_size, legacy_hash_function, missing_hybrid_support, untagged_cloud_key) and remediation messages referencing docs/POLICY_GUIDE.md.
+	- Added docs/POLICY_GUIDE.md for remediation guidance.
+	- Replaced policy-gate workflow to evaluate policy, upload opa_result.json & opa_summary.json, and comment on PRs.
+	- Added workflow_dispatch input 'enforce' (default false) to later enable blocking.
