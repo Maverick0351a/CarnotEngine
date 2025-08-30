@@ -1,0 +1,34 @@
+<!-- 2_Runtime_Discovery_Windows_Java_DotNet/Java_JFR/carnot_crypto.jfc -->
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration version="2.0" description="CarnotEngine Crypto Inventory Profile">
+
+    <!-- Capture TLS Handshake details (Protocol, CipherSuite, Peer) -->
+    <event name="jdk.tls.TlsHandshake">
+        <setting name="enabled">true</setting>
+        <setting name="stackTrace">false</setting> <!-- Minimize overhead -->
+        <setting name="threshold">0 ms</setting>
+    </event>
+
+    <!-- Capture Key Agreement algorithms (e.g., ECDHE, KEM) -->
+    <event name="jdk.crypto.KeyAgreement">
+        <setting name="enabled">true</setting>
+        <setting name="stackTrace">false</setting>
+    </event>
+
+    <!-- Capture Certificate details (Algorithms, Key Sizes, Expiration) -->
+    <event name="jdk.X509Certificate">
+        <setting name="enabled">true</setting>
+        <setting name="stackTrace">false</setting>
+    </event>
+
+</configuration>
+
+<!-- 
+Usage Instructions (JDK 11+):
+
+1. Start the application with JFR enabled:
+java -XX:StartFlightRecording=filename=carnot_recording.jfr,settings=carnot_crypto.jfc -jar MyApplication.jar
+
+2. Analyze the recording (requires a parser, but can be viewed with jfr tool):
+jfr print --events jdk.tls.TlsHandshake carnot_recording.jfr
+-->

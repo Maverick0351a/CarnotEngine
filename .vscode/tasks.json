@@ -1,0 +1,20 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build eBPF object",
+      "type": "shell",
+      "command": "cd carnot-agent/ebpf-core && make"
+    },
+    {
+      "label": "Build Go loader",
+      "type": "shell",
+      "command": "cd carnot-agent/ebpf-core/go-loader && go build -o bin/carnot-ebpf-loader ./..."
+    },
+    {
+      "label": "Run Assessment (E2E)",
+      "type": "shell",
+      "command": "bash scripts/run_assessment.sh"
+    }
+  ]
+}

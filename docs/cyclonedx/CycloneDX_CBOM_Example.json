@@ -1,0 +1,80 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "metadata": {
+    "timestamp": "2025-08-30T19:00:00Z",
+    "tools": [
+      {"vendor": "CarnotEngine", "name": "CarnotEngine Platform", "version": "0.1.0"}
+    ],
+    "component": {
+      "type": "application",
+      "name": "Global-Transaction-Service"
+    }
+  },
+  "version": 1,
+  // Cryptography Bill of Materials (CBOM) Extension (Standardized in CDX 1.6+)
+  "cryptography": {
+    "cryptoAssets": [
+      {
+        // Asset 1: Algorithm Implementation (Found via SAST)
+        "bom-ref": "crypto:algorithm:rsa-2048:static-sast-1",
+        "type": "algorithm",
+        "name": "RSA-2048",
+        "cryptoProperties": {
+          "assetType": "algorithm",
+          "algorithm": {"name": "RSA"},
+          "keySize": 2048,
+          "nistPqcStatus": "notPqc"
+        },
+        "evidence": {
+          "observations": [{
+            "technique": "static-analysis",
+            "confidence": 0.9,
+            "text": "Detected in src/LegacySigner.java:45 via cryptography.hazmat.primitives.asymmetric.rsa.generate_private_key"
+          }]
+        },
+        "properties": [
+            // Custom properties from CarnotEngine Risk Engine
+            {"name": "carnotengine:risk:score", "value": "550"},
+            {"name": "carnotengine:risk:severity", "value": "CRITICAL"}
+        ]
+      },
+      {
+        // Asset 2: AWS KMS Key (Found via Cloud API Inventory)
+        "bom-ref": "crypto:key:arn:aws:kms:us-east-1:12345:key/key-123",
+        "type": "key",
+        "name": "KMS-CMK-Transactions",
+        "cryptoProperties": {
+            "assetType": "key",
+            "algorithm": {"name": "RSA_2048"},
+            "nistPqcStatus": "notPqc",
+            "usage": ["encrypt", "decrypt"]
+        },
+        "evidence": {
+            "observations": [{"technique": "cloud_api_inventory"}]
+        },
+        "properties": [
+            {"name": "carnotengine:secrecy_lifetime_years", "value": "30"}
+        ]
+      },
+      {
+        // Asset 3: TLS Endpoint Posture (Found via Runtime/Network Analysis)
+        "bom-ref": "crypto:protocol:tls-endpoint-443",
+        "type": "protocol",
+        "name": "TLS 1.3 Endpoint",
+        "cryptoProperties": {
+            "assetType": "protocol",
+            "protocol": {"name": "TLSv1.3"},
+            // Detail the negotiated KEM/Ciphersuite observed
+            "implementationDetails": {
+                "negotiated_kem": "X25519", // Classical ECDHE
+                "ciphersuite": "TLS_AES_256_GCM_SHA384"
+            }
+        },
+        "evidence": {
+            "observations": [{"technique": "runtime_ebpf"}]
+        }
+      }
+    ]
+  }
+}

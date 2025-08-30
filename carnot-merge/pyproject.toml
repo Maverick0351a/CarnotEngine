@@ -1,0 +1,5 @@
+[project]
+name='carnot-merge'
+version='0.0.1'
+[project.scripts]
+carnot-merge='carnot_merge.__main__:main'

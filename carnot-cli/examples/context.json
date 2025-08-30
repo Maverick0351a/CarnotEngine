@@ -1,0 +1,7 @@
+{
+  "asset_id": "demo",
+  "owner": "platform",
+  "data_class": "internal",
+  "secrecy_lifetime_years": 10,
+  "exposure": "external"
+}

@@ -1,0 +1,7 @@
+Standard/Mandate,Requirement/Section,Requirement Summary,CarnotEngine Attestation Field(s),Verification Method
+OMB M-23-02,"Section 3(a)(i)",Inventory cryptographic systems.,"CryptoBOM.assets[*].asset_id, .crypto_metadata.algorithm",Discovery (SAST/Runtime/PKI)
+OMB M-23-02,"Section 3(a)(ii)",Prioritize systems based on risk (HNDL).,"CarnotEngine.risk_report.priority_score, .secrecy_lifetime_years",Risk Prioritization Engine
+NIST FIPS 203 (ML-KEM),"Algorithm Implementation",Use of ML-KEM for Key Encapsulation.,"CryptoBOM.assets[*].crypto_metadata.algorithm (e.g., MLKEM768)",Runtime (Negotiated KEM), SAST
+NIST FIPS 204 (ML-DSA),"Algorithm Implementation",Use of ML-DSA for Digital Signatures.,"CryptoBOM.assets[*].crypto_metadata.algorithm (e.g., MLDSA65)",PKI Inventory (Cert Signature Alg), SAST
+NIST FIPS 205 (SLH-DSA),"Algorithm Implementation",Use of SLH-DSA for Digital Signatures.,"CryptoBOM.assets[*].crypto_metadata.algorithm (e.g., SLHDSA-*)",PKI Inventory, SAST
+CISA ACDI Guidance,"Automation",Use of automated methods for inventory.,"CarnotEngine.attestation.provenance.discovery_method",Platform Metadata

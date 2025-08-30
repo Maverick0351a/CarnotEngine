@@ -1,0 +1,6 @@
+rules: []
+defaults:
+  owner: unknown
+  data_class: unclassified
+  secrecy_lifetime_years: 10
+  exposure: internal

@@ -1,0 +1,5 @@
+[project]
+name='carnot-cli'
+version='0.0.2'
+[project.scripts]
+carnot='carnot.__main__:main'

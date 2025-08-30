@@ -1,0 +1,23 @@
+# 7_PQC_Proxy_Deployment/openssl.cnf
+# OpenSSL 3 Configuration to activate the OQS provider
+
+# (Add this to the top of the standard openssl.cnf file)
+config_diagnostics = 1
+openssl_conf = openssl_init
+
+[openssl_init]
+providers = provider_sect
+
+[provider_sect]
+# Activate the OQS provider
+oqsprovider = oqsprovider_sect
+# Keep the default provider for classical algorithms (RSA, ECC)
+default = default_sect
+
+[oqsprovider_sect]
+activate = 1
+# Ensure this path matches the location in the Docker image
+module = /usr/local/lib/ossl-modules/oqsprovider.so
+
+[default_sect]
+activate = 1

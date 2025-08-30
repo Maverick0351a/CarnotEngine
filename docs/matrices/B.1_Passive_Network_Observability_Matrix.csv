@@ -1,0 +1,9 @@
+Feature,TCP + TLS 1.2,TCP + TLS 1.3 (Standard),QUIC (Standard),QUIC + ECH (Encrypted Client Hello)
+Destination IP/Port,Visible,Visible,Visible,Visible
+SNI (Server Name),Visible,Visible,Visible,"Hidden (Inner SNI Encrypted, only Outer/Public SNI visible)"
+ALPN (Protocols),Visible,Visible,Visible,"Hidden (Inner)"
+Client Offered Ciphers/Groups,Visible,Visible,Visible,"Hidden (Inner)"
+Server Certificate,"Visible (Plaintext)","Encrypted","Encrypted","Encrypted (Only Outer/Fronting cert visible)"
+Negotiated Cipher/Group,Visible,Visible,Visible,Hidden
+Connection Metadata (Seq/Ack),"Visible (TCP)","Visible (TCP)","Hidden (QUIC Encrypted)","Hidden (QUIC Encrypted)"
+CarnotEngine Strategy,Passive Network Tap,Passive Network Tap,Passive Network Tap,"Mandates Endpoint Telemetry (eBPF/ETW)"

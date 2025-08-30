@@ -1,0 +1,6 @@
+Platform,Crypto Library,PQC/Hybrid KEM Support Status,Mechanism/Migration Path,Limitations/Notes
+Nginx,OpenSSL 3.x,"Supported (Flexible)",Build against OpenSSL 3 and load OQS provider. Configure ssl_groups.,"Recommended path for edge deployment. Requires managing custom builds."
+HAProxy,OpenSSL 3.x,"Supported (Flexible)",Similar to Nginx. Build against OpenSSL 3 + OQS provider.,"Excellent performance and flexibility."
+Envoy Proxy (Istio),BoringSSL,"Experimental/Partial",Native BoringSSL implementation (e.g., X25519Kyber768).,"Crucially: Does NOT support OpenSSL providers. Requires custom Envoy builds. Lags behind OQS."
+Apache httpd,OpenSSL 3.x,"Supported (Flexible)",Via mod_ssl. Build against OpenSSL 3 + OQS provider.,Common in legacy environments.
+AWS ALB/NLB,AWS-LC (BoringSSL fork),"Partial (Managed)",AWS Managed Security Policies (e.g., PQC_TLS_1_3_V1).,"Dependent on AWS roadmap. Limited algorithm choices (e.g., Hybrid Kyber/ML-KEM)."

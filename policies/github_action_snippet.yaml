@@ -1,0 +1,35 @@
+# 6_Policy_as_Code_OPA/github_action_snippet.yaml
+# GitHub Action workflow snippet to run CarnotEngine scanner and enforce policies via OPA.
+
+name: CarnotEngine Policy Check
+
+on: [pull_request]
+
+jobs:
+  policy_validation:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    # Step 1: Run the CarnotEngine scanner (Replace with actual scanner execution)
+    # The scanner must analyze the PR and output findings in a JSON format suitable for OPA input.
+    - name: Run CarnotEngine Scanner
+      # Placeholder: Replace with actual scanner command (e.g., carnotengine scan > findings.json)
+      run: echo '{"resource_type": "sast_finding", "category": "direct_signing_operation", "uses_agility_sdk": false, "path": "src/main.c", "line": 10}' > findings.json
+
+    # Step 2: Setup OPA (Open Policy Agent)
+    - name: Setup OPA
+      uses: open-policy-agent/setup-opa@v2
+      with:
+        version: latest
+
+    # Step 3: Evaluate Policies
+    # Assumes policies are stored in the repository (e.g., ./policies/pqc_migration.rego)
+    - name: Evaluate Policies against Findings
+      # Use --fail-defined to fail the build if any 'deny' rules are met (non-zero exit code).
+      # IMPORTANT: Update the path (-d) to the location of the .rego file in your repository.
+      run: |
+        opa eval --fail-defined \
+          -i findings.json \
+          -d ./path/to/policies/pqc_migration.rego \
+          "data.carnotengine.pqc_migration.deny"

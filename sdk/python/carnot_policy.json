@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "description": "CarnotEngine Crypto-Agility Policy Configuration",
+  "policies": {
+    "SIGN_CODE_V1": {
+      "description": "Policy for signing internal code artifacts.",
+      "required_security_level": "PQC_LEVEL3",
+      "mode": "HYBRID",
+      "algorithms": {
+        "primary": "MLDSA65", // Dilithium 3 (FIPS 204)
+        "fallback": "ECDSA_P384" // Classical fallback
+      }
+    },
+    "KEM_INTERNAL_V1": {
+        "description": "Policy for internal service-to-service key encapsulation.",
+        "required_security_level": "PQC_LEVEL3",
+        "mode": "PRIMARY_ONLY",
+        "algorithms": {
+            "primary": "MLKEM768" // ML-KEM 768 (FIPS 203)
+        }
+    },
+    "SIGN_LEGACY_V1": {
+        "description": "Legacy signing policy during transition.",
+        "mode": "FALLBACK_ONLY",
+        "algorithms": {
+            "fallback": "RSA_3072"
+        }
+    }
+  }
+}
