@@ -15,3 +15,9 @@
 	- Added optional cgo shim (dlopen/dlsym) to call SSL_get_shared_group if exported.
 	- Emits negotiated_group in handshake JSON when available.
 	- Limitations: only dynamic libssl.so.3, skips statically linked or stripped symbols, pointer validity best-effort, hybrid group IDs placeholder mapping.
+- Task 02 (Runtime → CryptoBOM v2.1):
+	- Implemented integrations/runtime/ebpf_to_bom.py converting runtime.jsonl handshakes into runtime.bom.json observations.
+	- Adds bom_ref, counts unique SNIs, includes success flag & negotiated group.
+	- Merge command (example):
+		- python integrations/runtime/ebpf_to_bom.py --in artifacts/run1/runtime.jsonl --out artifacts/run1/runtime.bom.json --asset-id host:demo
+		- carnot-merge artifacts/run1/static.bom.json artifacts/run1/runtime.bom.json artifacts/run1/aws.bom.json -o artifacts/run1/merged.json
