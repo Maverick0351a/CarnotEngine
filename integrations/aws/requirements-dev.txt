@@ -1,0 +1,4 @@
+boto3
+botocore
+moto[all]>=5.0.0
+pytest

@@ -21,3 +21,8 @@
 	- Merge command (example):
 		- python integrations/runtime/ebpf_to_bom.py --in artifacts/run1/runtime.jsonl --out artifacts/run1/runtime.bom.json --asset-id host:demo
 		- carnot-merge artifacts/run1/static.bom.json artifacts/run1/runtime.bom.json artifacts/run1/aws.bom.json -o artifacts/run1/merged.json
+- Task 03 (AWS Inventory Tests & Defaults):
+	- Added defaults for untagged assets and tag extraction logic in aws_inventory.py.
+	- Implemented retry handling for throttling (exponential backoff).
+	- Created moto-based tests for pagination, defaults, throttling resilience.
+	- Added GitHub Actions workflow .github/workflows/tests.yml to run pytest.

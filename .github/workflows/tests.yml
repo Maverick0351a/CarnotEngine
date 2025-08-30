@@ -1,0 +1,24 @@
+name: Tests
+
+on:
+  push:
+    paths:
+      - 'integrations/aws/**'
+      - '.github/workflows/tests.yml'
+  pull_request:
+    paths:
+      - 'integrations/aws/**'
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          pip install -r integrations/aws/requirements-dev.txt
+      - name: Run tests
+        run: pytest -q integrations/aws/tests

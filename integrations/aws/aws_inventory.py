@@ -3,7 +3,7 @@ import boto3
 import json
 from datetime import datetime
 from botocore.exceptions import ClientError
-import logging
+import logging, time
 
 # Setup basic logging
 # logging.basicConfig(level=logging.INFO)
@@ -32,6 +32,40 @@ def inventory_aws_crypto(region='us-east-1'):
 
     return inventory
 
+DEFAULTS = {
+    "owner": "unknown",
+    "secrecy_lifetime_years": 3,
+    "exposure": "Internal"
+}
+
+TAG_KEYS = {
+    "owner": ["Owner","owner","AppOwner"],
+    "secrecy_lifetime_years": ["SecrecyYears","secrecy_years"],
+    "exposure": ["Exposure","exposure"],
+}
+
+def _extract_tags(tag_list):
+    out = {}
+    for t in tag_list or []:
+        k = t.get("TagKey") or t.get("Key")
+        v = t.get("TagValue") or t.get("Value")
+        if not k: continue
+        for field, candidates in TAG_KEYS.items():
+            if k in candidates:
+                out[field] = v
+    return out
+
+def _with_retries(fn, retries=3, base=0.5):
+    for i in range(retries):
+        try:
+            return fn()
+        except ClientError as e:
+            code = e.response.get('Error', {}).get('Code')
+            if code in ('Throttling','ThrottlingException','TooManyRequestsException') and i < retries-1:
+                time.sleep(base*(2**i))
+                continue
+            raise
+
 def inventory_kms(kms_client):
     kms_inventory = []
     # Use paginator for scalability
@@ -52,21 +86,33 @@ def inventory_kms(kms_client):
                     # Determine quantum vulnerability based on AWS KMS Specs
                     is_quantum_vulnerable = spec.startswith("RSA_") or spec.startswith("ECC_")
 
-                    # TODO: Implement fetching resource tags to populate owner/lifetime
+                    # Fetch tags
+                    try:
+                        tags_resp = _with_retries(lambda: kms_client.list_resource_tags(KeyId=key_id))
+                        tag_overrides = _extract_tags(tags_resp.get('Tags'))
+                    except ClientError:
+                        tag_overrides = {}
+
+                    owner = tag_overrides.get('owner', metadata.get("AWSAccountId") or DEFAULTS['owner'])
+                    try:
+                        secrecy_val = int(tag_overrides.get('secrecy_lifetime_years', DEFAULTS['secrecy_lifetime_years']))
+                    except ValueError:
+                        secrecy_val = DEFAULTS['secrecy_lifetime_years']
+                    exposure = tag_overrides.get('exposure', DEFAULTS['exposure'])
                     
                     kms_inventory.append({
                         "asset_id": metadata['Arn'],
                         "source": "AWS_KMS_CarnotEngine",
-                        "exposure": "Internal", # KMS keys are generally internal assets
-                        # Placeholders: In production, fetch these from Tags or resource policies
-                        "owner": metadata.get("AWSAccountId"), 
-                        "secrecy_lifetime_years": 5, # Default assumption, requires context/tags
+                        "exposure": exposure,
+                        "owner": owner,
+                        "secrecy_lifetime_years": secrecy_val,
                         "crypto_metadata": {
                             "algorithm": spec,
                             "is_quantum_vulnerable": is_quantum_vulnerable,
                             "usage": metadata.get("KeyUsage"),
                             "state": metadata.get("KeyState")
-                        }
+                        },
+                        "tags_present": bool(tag_overrides)
                     })
                 except ClientError as e:
                     logger.warning(f"Could not describe KMS key {key_id}: {e}")
@@ -99,19 +145,22 @@ def inventory_acm(acm_client):
                     if isinstance(not_after, datetime):
                         not_after = not_after.isoformat()
 
+                    owner = DEFAULTS['owner']
+                    secrecy_val = 1
                     acm_inventory.append({
                         "asset_id": cert_arn,
                         "source": "AWS_ACM_CarnotEngine",
                         "exposure": exposure,
-                        "owner": "Unknown", # Requires tagging strategy
-                        "secrecy_lifetime_years": 1, # TLS certs typically have short lives, but the data they protect might not.
+                        "owner": owner,
+                        "secrecy_lifetime_years": secrecy_val,
                         "crypto_metadata": {
                             "algorithm": alg,
                             "is_quantum_vulnerable": is_quantum_vulnerable,
                             "not_after": not_after,
                             "domain": details.get("DomainName"),
                             "in_use_by": details.get("InUseBy")
-                        }
+                        },
+                        "tags_present": False
                     })
                 except ClientError as e:
                     logger.warning(f"Could not describe ACM cert {cert_arn}: {e}")
