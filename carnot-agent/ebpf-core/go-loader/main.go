@@ -16,6 +16,8 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
+	// optional negotiated group accessor (cgo) guarded by build tag in its own file
+	"carnot-agent/ebpf-core/go-loader/negotiated"
 )
 
 type event struct {
@@ -41,6 +43,7 @@ type handshake struct {
 	SNI           string   `json:"sni,omitempty"`
 	Groups        []string `json:"groups_offered,omitempty"`
 	GroupSelected string   `json:"group_selected,omitempty"`
+	NegotiatedGrp string   `json:"negotiated_group,omitempty"`
 	Success       bool     `json:"success"`
 	SSLPtr        string   `json:"ssl_ptr,omitempty"`
 	DurationMs    float64  `json:"duration_ms,omitempty"`
@@ -229,6 +232,7 @@ func main() {
 					Time: time.Unix(0, int64(evt.TsNs)).UTC().Format(time.RFC3339Nano),
 					SNI: p.sni, Groups: p.groups, GroupSelected: p.groupSelected, Success: evt.Success, SSLPtr: p.sslptr,
 				}
+				if ng, ok := negotiated.Lookup(libssl, p.sslptr); ok { hs.NegotiatedGrp = ng }
 				if evt.DurationNs > 0 {
 					hs.DurationMs = float64(evt.DurationNs)/1e6
 					durations = append(durations, hs.DurationMs)
