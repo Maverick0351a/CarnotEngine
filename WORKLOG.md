@@ -31,3 +31,7 @@
 	- Added docs/POLICY_GUIDE.md for remediation guidance.
 	- Replaced policy-gate workflow to evaluate policy, upload opa_result.json & opa_summary.json, and comment on PRs.
 	- Added workflow_dispatch input 'enforce' (default false) to later enable blocking.
+- Task 05 (Cloud Run Attestation API):
+	- Added FastAPI service (api/main.py) with POST /attest producing JSON + markdown attestation.
+	- Dockerfile & requirements.txt created; deploy script scripts/deploy_cloud_run.sh for gcloud run deploy.
+	- Attestation includes HNDL exposure approximation and policy status.
