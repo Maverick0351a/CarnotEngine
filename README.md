@@ -10,3 +10,7 @@ Key implemented item:
 - OpenSSL handshake correlation (TID-keyed) emitting aggregated JSON lines with SNI, groups, success flag, and metrics (eventsReceived, handshakesEmitted, correlationTimeouts, cacheEvictions, kernel_drops).
 
 See `WORKLOG.md` and `COPILOT/` tasks for incremental progress and guidance.
+
+## License
+
+Licensed under the Apache License, Version 2.0. See `LICENSE` file for details.
