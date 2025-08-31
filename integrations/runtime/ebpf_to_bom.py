@@ -1,4 +1,4 @@
-import json, argparse, time, hashlib
+import json, argparse, time, hashlib, datetime
 
 def main():
     ap = argparse.ArgumentParser()
@@ -25,26 +25,42 @@ def main():
             if not ("pid" in ev and "tid" in ev and "proc" in ev):
                 continue
             sni = ev.get("sni") or None
+            sni_hash = ev.get("sni_hash") or None
             if sni:
                 sni_counts[sni] = sni_counts.get(sni,0)+1
             negotiated = ev.get("negotiated_group") or ev.get("group_selected")
             obs_id_seed = f"{args.asset_id}-{sni}-{ev.get('proc')}-{negotiated}".encode()
             bom_ref = "rtobs:" + hashlib.sha1(obs_id_seed).hexdigest()[:16]
+            # Normalize RFC3339 time (observation_time)
+            obs_time = ev.get("time")
+            # Assume loader already RFC3339Nano; fallback to now if missing
+            if not obs_time:
+                obs_time = datetime.datetime.utcnow().isoformat() + "Z"
+            # Required shape per spec: source, observation_time, process, pid, tid, success, groups_offered, group_selected, tls_version, cipher, sni|sni_hash
+            groups_offered = ev.get("groups_offered") or []
+            tls_version = ev.get("tls_version") if "tls_version" in ev else None
+            cipher = ev.get("cipher") if "cipher" in ev else None
             obs = {
                 "bom_ref": bom_ref,
                 "source": "runtime.ebpf",
+                "observation_time": obs_time,
                 "asset_id": args.asset_id,
                 "owner": args.owner,
                 "data_class": args.data_class,
                 "secrecy_lifetime_years": args.secrecy,
                 "exposure": args.exposure,
-                "time": ev.get("time"),
-                "pid": ev.get("pid"),
                 "process": ev.get("proc"),
-                "sni": sni,
-                "groups_offered": ev.get("groups_offered") or [],
+                "pid": ev.get("pid"),
+                "tid": ev.get("tid"),
+                # Privacy: include only one of sni / sni_hash
+                **({"sni": sni} if sni and not sni_hash else {}),
+                **({"sni_hash": sni_hash} if sni_hash else {}),
+                "groups_offered": groups_offered,
                 "group_selected": negotiated,
+                "tls_version": tls_version,
+                "cipher": cipher,
                 "success": ev.get("success"),
+                "pid": ev.get("pid"),
                 "confidence": 0.8
             }
             observations.append(obs)
