@@ -4,3 +4,10 @@ Extend `scripts/stress_test.sh` to prefer `hey`/`wrk2`, parse outputs to capture
 
 **Acceptance:**
 - `metrics.json` present with latency & drop rates; WORKLOG updated.
+
+Progress:
+- [x] Extended `scripts/stress_test.sh` to run loader + load tool (hey/wrk/curl fallback).
+- [x] Collects p95/p99 HTTP latency, throughput, handshake p95/p99 (from loader), correlation failure & kernel drop rates.
+- [x] Writes structured `metrics.json` and `docs/OVERHEAD_RESULTS.md` summary.
+- [x] Windows placeholder run produced metrics (no loader) -> commit.
+- [ ] Linux run with loader to capture handshake percentiles & drops.

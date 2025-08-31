@@ -1,0 +1,30 @@
+{
+  "schema": "carnot.attestation.v0",
+  "generated_at": "2025-08-30T00:00:00Z",
+  "subject": {
+    "asset_id": "host:demo",
+    "capture_window": "2025-08-30T00:00:00Z/2025-08-30T00:05:00Z"
+  },
+  "metrics": {
+    "total_handshakes": 1284,
+    "successful": 1279,
+    "failures": 5,
+    "unique_snis": 42,
+    "hybrid_ready_percent": 68,
+    "rsa_legacy_percent": 12
+  },
+  "policy": {
+    "violations": [
+      {"id": "rsa_min_key_size", "severity": "medium", "count": 3},
+      {"id": "legacy_hash_function", "severity": "low", "count": 1}
+    ],
+    "status": "warn"
+  },
+  "risk_summary": {
+    "hndl_percent": 12,
+    "narrative": "~12% of observed handshakes rely on legacy RSA constructs; prioritize migration of top 3 SNIs by volume."
+  },
+  "bom_refs_sample": [
+    "bomref:2f9c1c1a", "bomref:7bd83e02", "bomref:91ad01af"
+  ]
+}

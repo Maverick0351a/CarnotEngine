@@ -42,3 +42,9 @@
 	- Added GitHub Actions workflow `.github/workflows/site.yml` to deploy to Cloudflare Pages (project: carnotengine-site).
 	- Deployed via Wrangler to Cloudflare Pages project `carnotengine`.
 	- Live URL: https://carnotengine.pages.dev (samples accessible under /docs/samples/).
+- Task 07 (Stress & Overhead Measurement):
+	- Added extended `scripts/stress_test.sh` capturing p95/p99 HTTP latency, throughput, handshake latency percentiles.
+	- Computes correlation_failure_rate & kernel_drop_rate from loader metrics.
+	- Emits `metrics.json` and markdown summary `docs/OVERHEAD_RESULTS.md`.
+	- Windows placeholder run (no eBPF) recorded baseline (p95=~70ms, p99=~563ms @ ~17 rps).
+	- Pending: Linux run with loader for handshake p95/p99 & kernel drops.
