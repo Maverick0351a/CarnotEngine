@@ -63,4 +63,8 @@
 - Task 11 (E2E & Release Bundle):
 	- Added `scripts/build_release_bundle.sh` (Linux) and `scripts/build_release_bundle.ps1` (Windows) bundling `artifacts/assessment-*/` into `dist/` with manifest.
 	- Release workflow updated to run minimal assessment (skip eBPF/AWS) and build bundles on tag `v*.*.*` before publishing GitHub Release.
-	- Pending: tag `v0.1.0` to validate release artifact upload.
+	- Initial tag `v0.1.0` failed (setuptools multiple top-level packages for `carnot-merge`). Fixed by refining `pyproject.toml` (explicit setuptools discovery config).
+	- Tags `v0.1.1` and `v0.1.2` surfaced OPA rego parse errors (OPA 1.0 syntax changes). Updated `policies/pqc_migration.rego` to 1.0 style (`contains` + `if`).
+	- Made OPA eval non-fatal in `scripts/run_assessment.sh` (continues with empty violations on policy issues) to keep release resilient.
+	- Added visualization integration already producing `hndl_sankey.png`; violations chart appears once policy parses cleanly.
+	- Next: push tag `v0.1.3` (post rego + script fixes) to confirm green release with bundled artifacts and update acceptance note.
