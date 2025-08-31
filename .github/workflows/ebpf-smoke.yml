@@ -60,6 +60,15 @@ jobs:
           mkdir -p smoke-artifacts
           cp integrations/runtime/metrics.json smoke-artifacts/metrics_small_or_last.json || true
           cp integrations/runtime/runtime.jsonl smoke-artifacts/runtime_small_or_last.jsonl || true
+          # Generate Proof Readiness table & Sankey (best-effort)
+          python3 -m pip install --quiet jinja2 matplotlib pynacl || true
+          if [ -f integrations/runtime/metrics.json ]; then
+            python3 carnot-attest/report_viz.py \
+              --attestation docs/samples/sample_attestation.json \
+              --metrics integrations/runtime/metrics.json \
+              --proof-md smoke-artifacts/proof_readiness.md \
+              --out smoke-artifacts/hndl_sankey.png || true
+          fi
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
