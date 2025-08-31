@@ -67,4 +67,7 @@
 	- Tags `v0.1.1` and `v0.1.2` surfaced OPA rego parse errors (OPA 1.0 syntax changes). Updated `policies/pqc_migration.rego` to 1.0 style (`contains` + `if`).
 	- Made OPA eval non-fatal in `scripts/run_assessment.sh` (continues with empty violations on policy issues) to keep release resilient.
 	- Added visualization integration already producing `hndl_sankey.png`; violations chart appears once policy parses cleanly.
-	- Next: push tag `v0.1.3` (post rego + script fixes) to confirm green release with bundled artifacts and update acceptance note.
+	- Tag `v0.1.3` (policy fixes) still failed: GitHub Release step 403 (missing contents: write permission on default token).
+	- Added workflow `permissions: contents: write` and re-tagged `v0.1.4` → SUCCESS: release published with `assessment-<timestamp>.zip` + `assessments_manifest.json` assets.
+	- Visualization step previously errored (missing matplotlib); dependency now added so future releases include PNG charts.
+	- Next: Enrich release notes body (auto-generate summary + violation counts) and include SHA256 of bundle in manifest for integrity.

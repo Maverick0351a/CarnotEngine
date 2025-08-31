@@ -1,6 +1,6 @@
 [project]
 name='carnot-attest'
 version='0.2.0'
-dependencies=['pynacl','jinja2']
+dependencies=['pynacl','jinja2','matplotlib']
 [project.scripts]
 carnot-attest='carnot_attest.__main__:main'
