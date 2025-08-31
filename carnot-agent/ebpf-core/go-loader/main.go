@@ -16,8 +16,8 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
-	// optional negotiated group accessor (cgo) guarded by build tag in its own file
-	"carnot-agent/ebpf-core/go-loader/negotiated"
+	// negotiated group accessor (stub or cgo implementation)
+	"carnotengine/ebpf-loader/negotiated"
 )
 
 type event struct {
