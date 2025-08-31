@@ -15,13 +15,14 @@ struct event_t {
   __u64 ts_ns; __u32 pid; __u32 tid; char comm[TASK_COMM_LEN];
   __u8 kind; bool success; __u16 _pad; __u64 ssl_ptr;
   char sni[256]; char groups[128]; int group_id;
+  long ret; __u8 func_id; // func_id: 1=SSL_do_handshake,2=SSL_connect,3=SSL_connect_ex,4=SSL_accept
 };
 // Ring buffer size can be reduced (for drop testing) by compiling with -DSMALL_RB
 #ifdef SMALL_RB
 // Extremely small ring buffer (4KB) to force reservation failures during CI smoke test
 struct { __uint(type, BPF_MAP_TYPE_RINGBUF); __uint(max_entries, 4*1024);} events SEC(".maps");
 #else
-struct { __uint(type, BPF_MAP_TYPE_RINGBUF); __uint(max_entries, 512*1024);} events SEC(".maps");
+struct { __uint(type, BPF_MAP_TYPE_RINGBUF); __uint(max_entries, 1<<20);} events SEC(".maps");
 #endif
 struct { __uint(type, BPF_MAP_TYPE_HASH); __type(key,__u32); __type(value,__u64); __uint(max_entries,16384);} active_ssl SEC(".maps");
 struct { __uint(type, BPF_MAP_TYPE_ARRAY); __uint(max_entries,2); __type(key,__u32); __type(value,__u64);} counters SEC(".maps");
@@ -39,36 +40,36 @@ SEC("uprobe//libssl.so.3:SSL_connect") int BPF_KPROBE(SSL_connect_enter){
 SEC("uprobe//libssl.so.3:SSL_connect_ex") int BPF_KPROBE(SSL_connect_ex_enter){ __u64 p=(__u64)PT_REGS_PARM1(ctx); __u32 tid=get_tid(); bpf_map_update_elem(&active_ssl,&tid,&p,BPF_ANY); return 0; }
 // Server side
 SEC("uprobe//libssl.so.3:SSL_accept") int BPF_KPROBE(SSL_accept_enter){ __u64 p=(__u64)PT_REGS_PARM1(ctx); __u32 tid=get_tid(); bpf_map_update_elem(&active_ssl,&tid,&p,BPF_ANY); return 0; }
-SEC("uretprobe//libssl.so.3:SSL_do_handshake") int BPF_KRETPROBE(SSL_do_handshake_exit, int ret){
+SEC("uretprobe//libssl.so.3:SSL_do_handshake") int BPF_KRETPROBE(SSL_do_handshake_exit){ long ret = (long)PT_REGS_RC(ctx);
   __u32 tid=get_tid(); __u64 *pssl=bpf_map_lookup_elem(&active_ssl,&tid);
   struct event_t *e=bpf_ringbuf_reserve(&events,sizeof(*e),0); if(!e){ drop_inc(); return 0; }
   e->ts_ns=bpf_ktime_get_ns(); __u64 pt=bpf_get_current_pid_tgid(); e->pid=pt>>32; e->tid=(__u32)pt; bpf_get_current_comm(&e->comm,sizeof(e->comm));
-  e->kind=EVT_HANDSHAKE_RET; e->success=(ret==1); e->ssl_ptr=pssl?*pssl:0; e->sni[0]='\0'; e->groups[0]='\0'; e->group_id=-1;
+  e->kind=EVT_HANDSHAKE_RET; e->success=(ret>0); e->ssl_ptr=pssl?*pssl:0; e->sni[0]='\0'; e->groups[0]='\0'; e->group_id=-1; e->ret=ret; e->func_id=1;
   bpf_ringbuf_submit(e,0); count_inc(0); if(pssl) bpf_map_delete_elem(&active_ssl,&tid); return 0; }
 SEC("uretprobe//libssl.so.3:SSL_connect")
-int BPF_KRETPROBE(SSL_connect_exit, int ret){
+int BPF_KRETPROBE(SSL_connect_exit){ long ret = (long)PT_REGS_RC(ctx);
   __u32 tid=get_tid(); __u64 *pssl=bpf_map_lookup_elem(&active_ssl,&tid);
   struct event_t *e=bpf_ringbuf_reserve(&events,sizeof(*e),0); if(!e){ drop_inc(); return 0; }
   e->ts_ns=bpf_ktime_get_ns(); __u64 pt=bpf_get_current_pid_tgid(); e->pid=pt>>32; e->tid=(__u32)pt; bpf_get_current_comm(&e->comm,sizeof(e->comm));
-  e->kind=EVT_HANDSHAKE_RET; e->success=(ret==1); e->ssl_ptr=pssl?*pssl:0; e->sni[0]='\0'; e->groups[0]='\0'; e->group_id=-1;
+  e->kind=EVT_HANDSHAKE_RET; e->success=(ret>0); e->ssl_ptr=pssl?*pssl:0; e->sni[0]='\0'; e->groups[0]='\0'; e->group_id=-1; e->ret=ret; e->func_id=2;
   bpf_ringbuf_submit(e,0); count_inc(0); if(pssl) bpf_map_delete_elem(&active_ssl,&tid); return 0;
 }
 
 SEC("uretprobe//libssl.so.3:SSL_connect_ex")
-int BPF_KRETPROBE(SSL_connect_ex_exit, int ret){
+int BPF_KRETPROBE(SSL_connect_ex_exit){ long ret = (long)PT_REGS_RC(ctx);
   __u32 tid=get_tid(); __u64 *pssl=bpf_map_lookup_elem(&active_ssl,&tid);
   struct event_t *e=bpf_ringbuf_reserve(&events,sizeof(*e),0); if(!e){ drop_inc(); return 0; }
   e->ts_ns=bpf_ktime_get_ns(); __u64 pt=bpf_get_current_pid_tgid(); e->pid=pt>>32; e->tid=(__u32)pt; bpf_get_current_comm(&e->comm,sizeof(e->comm));
-  e->kind=EVT_HANDSHAKE_RET; e->success=(ret==1); e->ssl_ptr=pssl?*pssl:0; e->sni[0]='\0'; e->groups[0]='\0'; e->group_id=-1;
+  e->kind=EVT_HANDSHAKE_RET; e->success=(ret>0); e->ssl_ptr=pssl?*pssl:0; e->sni[0]='\0'; e->groups[0]='\0'; e->group_id=-1; e->ret=ret; e->func_id=3;
   bpf_ringbuf_submit(e,0); count_inc(0); if(pssl) bpf_map_delete_elem(&active_ssl,&tid); return 0;
 }
 
 SEC("uretprobe//libssl.so.3:SSL_accept")
-int BPF_KRETPROBE(SSL_accept_exit, int ret){
+int BPF_KRETPROBE(SSL_accept_exit){ long ret = (long)PT_REGS_RC(ctx);
   __u32 tid=get_tid(); __u64 *pssl=bpf_map_lookup_elem(&active_ssl,&tid);
   struct event_t *e=bpf_ringbuf_reserve(&events,sizeof(*e),0); if(!e){ drop_inc(); return 0; }
   e->ts_ns=bpf_ktime_get_ns(); __u64 pt=bpf_get_current_pid_tgid(); e->pid=pt>>32; e->tid=(__u32)pt; bpf_get_current_comm(&e->comm,sizeof(e->comm));
-  e->kind=EVT_HANDSHAKE_RET; e->success=(ret==1); e->ssl_ptr=pssl?*pssl:0; e->sni[0]='\0'; e->groups[0]='\0'; e->group_id=-1;
+  e->kind=EVT_HANDSHAKE_RET; e->success=(ret>0); e->ssl_ptr=pssl?*pssl:0; e->sni[0]='\0'; e->groups[0]='\0'; e->group_id=-1; e->ret=ret; e->func_id=4;
   bpf_ringbuf_submit(e,0); count_inc(0); if(pssl) bpf_map_delete_elem(&active_ssl,&tid); return 0;
 }
 SEC("uprobe//libssl.so.3:SSL_set_tlsext_host_name") int BPF_KPROBE(SSL_set_tlsext_host_name_enter){

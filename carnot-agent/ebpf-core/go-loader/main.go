@@ -1,5 +1,5 @@
 package main
-
+import (
 import (
 	"bytes"
 	"context"
@@ -30,12 +30,12 @@ import (
 	"github.com/cilium/ebpf/ringbuf"
 )
 
-// event mirrors the exact memory layout of struct event_t in openssl_handshake.bpf.c
+// event mirrors struct event_t (keep sizes in sync if modified)
 // C struct event_t {
-//   __u64 ts_ns; __u32 pid; __u32 tid; char comm[16];
-//   __u8 kind; bool success; __u16 _pad; __u64 ssl_ptr;
-//   char sni[256]; char groups[128]; int group_id;
-// } (size 432 bytes)
+//  u64 ts_ns; u32 pid; u32 tid; char comm[16];
+//  u8 kind; bool success; u16 _pad; u64 ssl_ptr;
+//  char sni[256]; char groups[128]; int group_id; long ret; u8 func_id;
+// };
 type event struct {
 	TsNs    uint64
 	Pid     uint32
@@ -48,13 +48,16 @@ type event struct {
 	Sni     [256]byte
 	Groups  [128]byte
 	GroupID int32
+	Ret     int64
+	FuncID  uint8
 }
 
 type handshake struct {
 	Pid           uint32   `json:"pid"`
 	Tid           uint32   `json:"tid"`
 	Proc          string   `json:"proc"`
-	Time          string   `json:"time"`
+	TimeWall      string   `json:"time_wall"`
+	TimeMonoNs    int64    `json:"time_mono_ns"`
 	SNI           string   `json:"sni,omitempty"`
 	SNIHash       string   `json:"sni_hash,omitempty"`
 	Groups        []string `json:"groups_offered,omitempty"`
@@ -72,6 +75,10 @@ type partial struct {
 	groups        []string
 	groupSelected string
 	sslptr        string
+	retConnect    int64
+	retDoHS       int64
+	retConnectEx  int64
+	retAccept     int64
 }
 
 // metrics matches acceptance criteria naming.
@@ -110,10 +117,20 @@ func groupName(id int32) string {
 	}
 }
 
+func sanitizeSNI(raw string) (string, string) {
+	raw = strings.TrimSpace(strings.Trim(raw, "\x00"))
+	if raw == "" || !utf8.ValidString(raw) || strings.IndexFunc(raw, func(r rune) bool { return r < 32 }) >= 0 || len(raw) > 253 {
+		sum := sha256.Sum256([]byte(raw))
+		return "", hex.EncodeToString(sum[:])
+	}
+	return raw, ""
+}
+
 func main() {
 	var objPath, libssl, outPath, metricsPath string
 	var evictTTL time.Duration
 	var hashSNIMode, hashIPMode, hashKeyStr string
+	var ringSize int
 	flag.StringVar(&objPath, "obj", "openssl_handshake.bpf.o", "BPF object path")
 	flag.StringVar(&libssl, "libssl", "/lib/x86_64-linux-gnu/libssl.so.3", "libssl.so.3 path")
 	flag.StringVar(&outPath, "out", "runtime.jsonl", "Aggregated output JSONL (one per handshake)")
@@ -122,6 +139,7 @@ func main() {
 	flag.StringVar(&hashSNIMode, "hash-sni", "none", "Hash mode for SNI: none|sha256|hmac")
 	flag.StringVar(&hashIPMode, "hash-ip", "none", "Hash mode for client/server IPs (future): none|sha256|hmac")
 	flag.StringVar(&hashKeyStr, "hash-key", "", "Key (hex or base64) for HMAC when hash-* mode is hmac")
+	flag.IntVar(&ringSize, "rb", 1<<20, "Ring buffer size hint (must match BPF if larger)")
 	// metrics log interval is fixed at 5s per requirements, but allow override via env in future if needed.
 	flushInterval := 5 * time.Second
 	flag.Parse()
@@ -355,6 +373,60 @@ func main() {
 
 	var evt event
 	expectedSize := int(unsafe.Sizeof(event{}))
+	workers := 4
+	jobs := make(chan []byte, 1024)
+	var wg sync.WaitGroup
+	process := func(raw []byte){
+		if len(raw) != expectedSize { metricsData.ReaderErrors++; return }
+		if err := binary.Read(bytes.NewReader(raw), binary.LittleEndian, &evt); err != nil { metricsData.ReaderErrors++; return }
+		metricsData.EventsReceived++
+		kind := evt.Kind
+		pid, tid := evt.Pid, evt.Tid
+		proc := string(bytes.Trim(evt.Comm[:], "\x00"))
+		sniRaw := string(bytes.Trim(evt.Sni[:], "\x00"))
+		gr := string(bytes.Trim(evt.Groups[:], "\x00"))
+		k := key(tid)
+		mono := int64(evt.TsNs)
+
+		mu.Lock()
+		p := cache[k]
+		if p == nil { p = &partial{firstSeen: time.Now(), proc: proc}; cache[k] = p }
+		switch kind {
+		case 2,3: // SNI_SET
+			if p.sni == "" && p.sniHash == "" { // first one wins
+				clean, h := sanitizeSNI(sniRaw)
+				p.sni = clean
+				if clean == "" { p.sniHash = h } else if hashSNIMode != "none" { // privacy mode hashing
+					p.sniHash = hashBytes([]byte(clean), hashSNIMode)
+					p.sni = ""
+				}
+			}
+			p.sslptr = fmt.Sprintf("0x%x", evt.SslPtr)
+		case 3: // GROUPS_SET (note: value 3 reused earlier; groups event originally 3; if collision treat via kind value separation in C would be better)
+			if gr != "" { p.groups = append(p.groups, gr) }
+		case 4: // GROUP_SELECTED
+			if evt.GroupID != 0 { p.groupSelected = groupName(evt.GroupID) }
+		case 1: // HANDSHAKE_RET
+			// Record return codes
+			switch evt.FuncID { case 1: p.retDoHS = evt.Ret; case 2: p.retConnect = evt.Ret; case 3: p.retConnectEx = evt.Ret; case 4: p.retAccept = evt.Ret }
+			// Compute success across any positive return
+			success := p.retDoHS>0 || p.retConnect>0 || p.retConnectEx>0 || p.retAccept>0 || evt.Success
+			hs := handshake{
+				Pid: pid, Tid: tid, Proc: proc,
+				TimeWall: time.Now().UTC().Format(time.RFC3339Nano),
+				TimeMonoNs: mono,
+				SNI: p.sni, Groups: p.groups, GroupSelected: p.groupSelected, Success: success, SSLPtr: p.sslptr,
+			}
+			if p.sniHash != "" { hs.SNIHash = p.sniHash }
+			enc, _ := json.Marshal(hs)
+			outf.Write(enc); outf.Write([]byte("\n"))
+			metricsData.HandshakesEmitted++
+			if p.sni == "" && p.sniHash == "" { metricsData.HandshakesNoSNI++ }
+			delete(cache, k)
+		}
+		mu.Unlock()
+	}
+	for i:=0;i<workers;i++ { wg.Add(1); go func(){ defer wg.Done(); for raw := range jobs { process(raw) } }() }
 	for {
 		rec, err := rd.Read()
 		if err != nil {
@@ -362,80 +434,22 @@ func main() {
 			metricsData.ReaderErrors++
 			continue
 		}
-		if len(rec.RawSample) != expectedSize {
-			metricsData.ReaderErrors++
-			log.Printf("skip event: size mismatch got=%d want=%d", len(rec.RawSample), expectedSize)
-			continue
-		}
-		if err := binary.Read(bytes.NewReader(rec.RawSample), binary.LittleEndian, &evt); err == nil {
-			metricsData.EventsReceived++
-			kind := evt.Kind
-			pid, tid := evt.Pid, evt.Tid
-			proc := string(bytes.Trim(evt.Comm[:], "\x00"))
-			sniRaw := string(bytes.Trim(evt.Sni[:], "\x00"))
-			gr := string(bytes.Trim(evt.Groups[:], "\x00"))
-			k := key(tid)
-
-			mu.Lock()
-			p := cache[k]
-			if p == nil { p = &partial{firstSeen: time.Now(), proc: proc}; cache[k] = p }
-			switch kind {
-			case 2,3: // SNI_SET (original and SSL_ctrl alternate)
-				// Sanitize SNI (utf8, printable, trim spaces, enforce length <=253 per RFC 1035/1123-ish)
-				valid := true
-				if !utf8.ValidString(sniRaw) { valid = false }
-				// remove NULs and control chars
-				filtered := make([]rune,0,len(sniRaw))
-				for _, r := range sniRaw {
-					if r == 0 || r < 32 { continue }
-					filtered = append(filtered, r)
-				}
-				clean := strings.TrimSpace(string(filtered))
-				if len(clean) > 253 { clean = clean[:253] }
-				// Basic hostname char validation (allow a-zA-Z0-9.-)
-				for _, r := range clean {
-					if !(r == '-' || r == '.' || (r>='0'&&r<='9') || (r>='a'&&r<='z') || (r>='A'&&r<='Z')) { valid = false; break }
-				}
-				if valid && clean != "" {
-					p.sni = clean
-				} else {
-					p.sni = ""
-					// compute hash of raw for telemetry/privacy if enabled OR always store hash to separate invalid marker
-					p.sniHash = hashBytes([]byte(sniRaw), hashSNIMode)
-					if p.sniHash == "" { // ensure we always have a hash for invalid even if mode=none -> fallback sha256
-						p.sniHash = hashBytes([]byte(sniRaw), "sha256")
-					}
-				}
-				p.sslptr = fmt.Sprintf("0x%x", evt.SslPtr)
-			case 3: // GROUPS_SET
-				if gr != "" { p.groups = append(p.groups, gr) }
-			case 4: // GROUP_SELECTED
-				if evt.GroupID != 0 { p.groupSelected = groupName(evt.GroupID) }
-			case 1: // HANDSHAKE_RET
-				hs := handshake{
-					Pid: pid, Tid: tid, Proc: proc,
-					Time: time.Unix(0, int64(evt.TsNs)).UTC().Format(time.RFC3339Nano),
-					SNI: p.sni, Groups: p.groups, GroupSelected: p.groupSelected, Success: evt.Success, SSLPtr: p.sslptr,
-				}
-				// Apply hashing for SNI if enabled
-				if hashSNIMode != "none" && hs.SNI != "" {
-					hs.SNIHash = hashBytes([]byte(hs.SNI), hashSNIMode)
-					hs.SNI = "" // remove plaintext
-				}
-				// If SNI empty but we have stored sniHash (invalid raw), surface it
-				if hs.SNI == "" && hs.SNIHash == "" && p.sni == "" && p.sniHash != "" { hs.SNIHash = p.sniHash }
-				enc, _ := json.Marshal(hs)
-				outf.Write(enc); outf.Write([]byte("\n"))
-				metricsData.HandshakesEmitted++
-				if p.sni == "" { metricsData.HandshakesNoSNI++ }
-				delete(cache, k)
-			}
-			mu.Unlock()
-		}
+		cp := make([]byte, len(rec.RawSample))
+		copy(cp, rec.RawSample)
+		jobs <- cp
 	}
+	close(jobs); wg.Wait()
+	// final summary
 	// final summary
 	if metricsData.EventsReceived > 0 {
 		metricsData.KernelDropRate = float64(metricsData.KernelDrops) / float64(metricsData.EventsReceived)
+	}
+	// Attempt to list first symbols for diagnostic (best-effort)
+	if libssl != "" {
+		cmd := exec.Command("bash","-c", fmt.Sprintf("(command -v nm >/dev/null 2>&1 && nm -D %s | head -n 50) || (command -v llvm-objdump >/dev/null 2>&1 && llvm-objdump -T %s | head -n 50) || true", libssl, libssl))
+		if out, err := cmd.CombinedOutput(); err == nil {
+			log.Printf("libssl symbols (truncated):\n%s", string(out))
+		}
 	}
 	log.Printf("FINAL metrics eventsReceived=%d handshakesEmitted=%d correlationTimeouts=%d cacheEvictions=%d kernel_drops=%d kernel_drop_rate=%.6f", 
 		metricsData.EventsReceived, metricsData.HandshakesEmitted, metricsData.CorrelationTimeouts, metricsData.CacheEvictions, metricsData.KernelDrops, metricsData.KernelDropRate)
