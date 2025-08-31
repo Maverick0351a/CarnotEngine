@@ -1,0 +1,32 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Font /Subtype /Type1 /Name /F1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 2862 >>
+stream
+BT /F1 10 Tf 1 0 0 1 50 800 Tm (# CarnotEngine Crypto Posture Assessment) Tj 1 0 0 1 50 786 Tm () Tj 1 0 0 1 50 772 Tm (<img src="logo.png" alt="CarnotEngine" width="180" />) Tj 1 0 0 1 50 758 Tm () Tj 1 0 0 1 50 744 Tm (**Company:** DemoCorp  ) Tj 1 0 0 1 50 730 Tm (**Date:** 2025-08-30  ) Tj 1 0 0 1 50 716 Tm (**Prepared By:** CarnotEngine Team \(contact@carnotengine.example\)  ) Tj 1 0 0 1 50 702 Tm (**Confidentiality:** Proprietary & Confidential  Do not distribute.) Tj 1 0 0 1 50 688 Tm () Tj 1 0 0 1 50 674 Tm (---) Tj 1 0 0 1 50 660 Tm (## Executive Summary) Tj 1 0 0 1 50 646 Tm (Provide a 23 paragraph highlevel summary of crypto posture, key risks, and recommended immediate actions.) Tj 1 0 0 1 50 632 Tm () Tj 1 0 0 1 50 618 Tm (- HNDL Exposure: 0%) Tj 1 0 0 1 50 604 Tm (- Total Observations: 0) Tj 1 0 0 1 50 590 Tm (- High Severity Policy Violations: 0) Tj 1 0 0 1 50 576 Tm () Tj 1 0 0 1 50 562 Tm (## Key Findings) Tj 1 0 0 1 50 548 Tm (| Category | Finding | Severity | Recommendation |) Tj 1 0 0 1 50 534 Tm (|----------|---------|----------|----------------|) Tj 1 0 0 1 50 520 Tm (| Key Management | Example: RSA 2048 key still in use | High | Rotate to >=3072 or hybrid KEM |) Tj 1 0 0 1 50 506 Tm (| TLS Configuration | Missing hybrid KEM | Medium | Enable PQC hybrid via OQS provider |) Tj 1 0 0 1 50 492 Tm (| Hash Algorithms | SHA1 usage detected | Medium | Migrate to SHA256+ |) Tj 1 0 0 1 50 478 Tm (| Cloud Keys | Untagged KMS keys | Low | Add Owner/SecrecyYears tags |) Tj 1 0 0 1 50 464 Tm () Tj 1 0 0 1 50 450 Tm (## Risk Snapshot) Tj 1 0 0 1 50 436 Tm (Embed chart \(Sankey + violations bar\) in final PDF if available.) Tj 1 0 0 1 50 422 Tm () Tj 1 0 0 1 50 408 Tm (## Detailed Observations) Tj 1 0 0 1 50 394 Tm (Summarize notable observations with context linking to raw artifacts \(runtime, static, AWS inventory\).) Tj 1 0 0 1 50 380 Tm () Tj 1 0 0 1 50 366 Tm (## Policy Violations) Tj 1 0 0 1 50 352 Tm (Outline each violation with remediation steps referencing `docs/POLICY_GUIDE.md`.) Tj 1 0 0 1 50 338 Tm () Tj 1 0 0 1 50 324 Tm (## Recommended Roadmap \(Next 90 Days\)) Tj 1 0 0 1 50 310 Tm (1. Immediate \(Week 12\):) Tj 1 0 0 1 50 296 Tm (2. Short Term \(Month 1\):) Tj 1 0 0 1 50 282 Tm (3. Mid Term \(Quarter\):) Tj 1 0 0 1 50 268 Tm () Tj 1 0 0 1 50 254 Tm (## Methodology) Tj 1 0 0 1 50 240 Tm (Describe data sources: static code scanning, eBPF runtime handshake correlation, AWS inventory, OPA policy evaluation, HNDL exposure calc.) Tj 1 0 0 1 50 226 Tm () Tj 1 0 0 1 50 212 Tm (## Appendix) Tj 1 0 0 1 50 198 Tm (- Attestation Summary) Tj 1 0 0 1 50 184 Tm (- Metrics \(latency overhead\)) Tj 1 0 0 1 50 170 Tm (- Raw JSON Artifacts \(attached separately\)) Tj 1 0 0 1 50 156 Tm () Tj 1 0 0 1 50 142 Tm (---) Tj 1 0 0 1 50 128 Tm (_Copyright © 2025 CarnotEngine. All rights reserved._) Tj ET
+endstream
+endobj
+3 0 obj
+<< /Type /Page /Parent 4 0 R /Resources << /Font << /F1 1 0 R >> >> /MediaBox [0 0 595 842] /Contents 2 0 R >>
+endobj
+4 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+5 0 obj
+<< /Type /Catalog /Pages 4 0 R >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000015 00000 n 
+0000000095 00000 n 
+0000002996 00000 n 
+0000003122 00000 n 
+0000003179 00000 n 
+trailer << /Size 6 /Root 5 0 R >>
+startxref
+3228
+%%EOF
