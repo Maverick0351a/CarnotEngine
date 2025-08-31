@@ -34,6 +34,7 @@ This consolidated repository merges the Deepthink kit with runnable scaffolding 
 
 Current prototype focus:
 - OpenSSL handshake correlation (TID-keyed) emitting aggregated JSON lines with SNI, offered groups, negotiated group & metrics (eventsReceived, handshakesEmitted, correlationTimeouts, cacheEvictions, kernel_drops).
+	- Optional privacy hashing: `--hash-sni sha256|hmac` (with `--hash-key` for HMAC) removes plaintext SNI replacing with `sni_hash` (hex SHA256 / HMAC-SHA256). Future: IP hashing via `--hash-ip` (flag present; emission TBD).
 - Runtime → CryptoBOM conversion utility (`integrations/runtime/ebpf_to_bom.py`).
 - AWS KMS / ACM inventory with tag enrichment & tests.
 - OPA policy gate (warn mode) + remediation guide.
