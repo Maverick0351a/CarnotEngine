@@ -30,13 +30,13 @@ jobs:
       - name: Install deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm make golang-go jq
+          sudo apt-get install -y clang llvm make golang-go jq bpftool
           go install github.com/rakyll/hey@latest
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Build eBPF & loader
         run: |
           cd carnot-agent/ebpf-core
-          make
+          make all
           cd go-loader
           go build -o bin/carnot-ebpf-loader ./...
       - name: Run stress test

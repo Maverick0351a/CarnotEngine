@@ -6,11 +6,11 @@
 #ifndef TASK_COMM_LEN
 #define TASK_COMM_LEN 16
 #endif
-enum evt_kind { EVT_HANDSHAKE_RET=1, EVT_SNI_SET=2, EVT_GROUPS_SET=3 };
+enum evt_kind { EVT_HANDSHAKE_RET=1, EVT_SNI_SET=2, EVT_GROUPS_SET=3, EVT_GROUP_SELECTED=4 };
 struct event_t {
   __u64 ts_ns; __u32 pid; __u32 tid; char comm[TASK_COMM_LEN];
   __u8 kind; bool success; __u16 _pad; __u64 ssl_ptr;
-  char sni[256]; char groups[128];
+  char sni[256]; char groups[128]; int group_id;
 };
 struct { __uint(type, BPF_MAP_TYPE_RINGBUF); __uint(max_entries, 512*1024);} events SEC(".maps");
 struct { __uint(type, BPF_MAP_TYPE_HASH); __type(key,__u32); __type(value,__u64); __uint(max_entries,16384);} active_ssl SEC(".maps");
@@ -32,7 +32,7 @@ SEC("uprobe//libssl.so.3:SSL_set_tlsext_host_name") int BPF_KPROBE(SSL_set_tlsex
 SEC("uprobe//libssl.so.3:SSL_CTX_set1_groups_list") int BPF_KPROBE(SSL_CTX_set1_groups_list_enter){
   const char* str=(const char*)PT_REGS_PARM2(ctx); struct event_t *e=bpf_ringbuf_reserve(&events,sizeof(*e),0); if(!e){count_inc(1); return 0;}
   e->ts_ns=bpf_ktime_get_ns(); __u64 pt=bpf_get_current_pid_tgid(); e->pid=pt>>32; e->tid=(__u32)pt; bpf_get_current_comm(&e->comm,sizeof(e->comm));
-  e->kind=EVT_GROUPS_SET; e->success=false; e->ssl_ptr=0; e->sni[0]='\0'; bpf_probe_read_user_str(e->groups,sizeof(e->groups),str);
+  e->kind=EVT_GROUPS_SET; e->success=false; e->ssl_ptr=0; e->sni[0]='\0'; bpf_probe_read_user_str(e->groups,sizeof(e->groups),str); e->group_id=-1;
   bpf_ringbuf_submit(e,0); count_inc(0); return 0; }
 
 // Negotiated group (best-effort). We try several potential symbols; not all may exist.
