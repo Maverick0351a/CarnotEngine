@@ -35,9 +35,13 @@ jobs:
           sudo add-apt-repository universe -y
           sudo apt-get update
           if ! sudo apt-get install -y bpftool; then
-            echo "bpftool package unavailable, building from source (pin v7.2)...";
+            echo "bpftool package unavailable, building from source (pin v7.3.0)...";
             sudo apt-get install -y git build-essential libelf-dev zlib1g-dev clang llvm make pkg-config
-            git clone --depth 1 --branch v7.2 https://github.com/libbpf/bpftool.git /tmp/bpftool-src
+            BPFTOOL_TAG="v7.3.0"
+            if ! git clone --depth 1 --branch "$BPFTOOL_TAG" https://github.com/libbpf/bpftool.git /tmp/bpftool-src; then
+              echo "Tag $BPFTOOL_TAG not found, cloning main as fallback";
+              git clone --depth 1 https://github.com/libbpf/bpftool.git /tmp/bpftool-src
+            fi
             git -C /tmp/bpftool-src submodule update --init --recursive || true
             make -C /tmp/bpftool-src/src V=1
             sudo cp /tmp/bpftool-src/src/bpftool /usr/local/bin/
