@@ -27,10 +27,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install deps
+      - name: Install deps (with bpftool)
         run: |
+          set -e
           sudo apt-get update
-          sudo apt-get install -y clang llvm make golang-go jq bpftool
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository universe -y
+          sudo apt-get update
+          if ! sudo apt-get install -y bpftool; then
+            echo "bpftool package unavailable, building from source...";
+            sudo apt-get install -y git build-essential libelf-dev libz-dev clang llvm make pkg-config
+            git clone --depth 1 https://github.com/libbpf/bpftool.git /tmp/bpftool-src
+            make -C /tmp/bpftool-src/src
+            sudo cp /tmp/bpftool-src/src/bpftool /usr/local/bin/
+          fi
+          sudo apt-get install -y clang llvm make golang-go jq
           go install github.com/rakyll/hey@latest
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Build eBPF & loader
