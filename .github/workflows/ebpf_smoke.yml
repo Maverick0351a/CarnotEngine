@@ -9,7 +9,7 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       actions: read
       id-token: write
     steps:
@@ -37,6 +37,21 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.22.x'
+
+      - name: Go module tidy (auto-fix go.mod/go.sum if needed)
+        working-directory: carnot-agent/ebpf-core/go-loader
+        run: |
+          go mod tidy
+          if ! git diff --quiet go.mod go.sum; then
+            echo "[info] go.mod/go.sum updated; committing changes";
+            git config user.name "github-actions";
+            git config user.email "actions@github.com";
+            git add go.mod go.sum;
+            git commit -m "ci: tidy go modules" || true;
+            git push || echo "[warn] push failed (possible fork/PR context)";
+          else
+            echo "[info] go.mod/go.sum already tidy";
+          fi
 
       - name: Version Summary
         run: |
