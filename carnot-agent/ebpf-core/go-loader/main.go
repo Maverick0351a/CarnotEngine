@@ -108,7 +108,8 @@ func main() {
 	if events == nil { log.Fatalf("events ringbuf not found") }
 	counters := coll.Maps["counters"] // may be nil if older BPF object; tolerate
 
-	exe := link.OpenExecutable(libssl)
+	exe, err := link.OpenExecutable(libssl)
+	if err != nil { log.Fatalf("open executable: %v", err) }
 	type probe struct{ sym string; ret bool; prog string }
 	probes := []probe{
 		{"SSL_do_handshake", false, "SSL_do_handshake_enter"},
@@ -245,7 +246,6 @@ func main() {
 			}
 			mu.Unlock()
 		}
-		rd.Release(rec)
 	}
 	// final summary
 	log.Printf("FINAL metrics eventsReceived=%d handshakesEmitted=%d correlationTimeouts=%d cacheEvictions=%d kernel_drops=%d", 
