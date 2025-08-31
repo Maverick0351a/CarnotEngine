@@ -13,8 +13,8 @@
 	- Expected: runtime.jsonl lines containing pid, tid, sni, groups_offered, success; low kernel_drops & correlationTimeouts.
 - Task 01b (Negotiated Group Extraction):
 	- Added optional cgo shim (dlopen/dlsym) to call SSL_get_shared_group if exported.
-	- Emits negotiated_group in handshake JSON when available.
-	- Limitations: only dynamic libssl.so.3, skips statically linked or stripped symbols, pointer validity best-effort, hybrid group IDs placeholder mapping.
+	- (Replaced) Kernel uretprobes now emit EVT_GROUP_SELECTED; legacy cgo path removed for simplicity and portability.
+	- Emits negotiated group via eBPF events; hybrid group ID mapping placeholder retained.
 - Task 02 (Runtime → CryptoBOM v2.1):
 	- Implemented integrations/runtime/ebpf_to_bom.py converting runtime.jsonl handshakes into runtime.bom.json observations.
 	- Adds bom_ref, counts unique SNIs, includes success flag & negotiated group.
@@ -48,6 +48,7 @@
 	- Emits `metrics.json` and markdown summary `docs/OVERHEAD_RESULTS.md`.
 	- Windows placeholder run (no eBPF) recorded baseline (p95=~70ms, p99=~563ms @ ~17 rps).
 	- Linux run (GitHub Actions run #14) produced handshake metrics & kernel drop stats (artifact: stress-metrics). Repository docs update in progress.
+	- Added `drop_counters` BPF array map (index 0) tracking ring buffer reservation failures and `SMALL_RB` build flag to intentionally induce drops during stress validation. Loader now reports `kernel_drops` and `kernel_drop_rate` (drops / eventsReceived).
 - Added GitHub Actions workflow `.github/workflows/stress.yml` to run full Linux stress test (build eBPF + Go loader, run harness, upload metrics artifacts) so we can collect real handshake correlation & kernel drop metrics without needing local Linux host.
 - Task 08 (Attestation Visualization):
 	- Added Sankey diagram + optional violations bar chart generator (`carnot-attest/report_viz.py`).

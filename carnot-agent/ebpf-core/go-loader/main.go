@@ -64,6 +64,7 @@ type metrics struct {
 	CorrelationTimeouts uint64  `json:"correlationTimeouts"`
 	CacheEvictions      uint64  `json:"cacheEvictions"`
 	KernelDrops         uint64  `json:"kernel_drops"`
+	KernelDropRate      float64 `json:"kernel_drop_rate"`
 	// Additional internal diagnostics (not required but useful)
 	ReaderErrors        uint64  `json:"readerErrors"`
 	HandshakesNoSNI     uint64  `json:"handshakesNoSNI"`
@@ -107,6 +108,7 @@ func main() {
 	events := coll.Maps["events"]
 	if events == nil { log.Fatalf("events ringbuf not found") }
 	counters := coll.Maps["counters"] // may be nil if older BPF object; tolerate
+	dropCounters := coll.Maps["drop_counters"] // new map for ringbuf reserve drops
 
 	exe, err := link.OpenExecutable(libssl)
 	if err != nil { log.Fatalf("open executable: %v", err) }
@@ -191,11 +193,16 @@ func main() {
 					durations = durations[:0]
 				}
 				// refresh kernel drops if available
-				if counters != nil {
+				if dropCounters != nil {
 					var kd uint64
-					if err := counters.Lookup(uint32(1), &kd); err == nil {
+					if err := dropCounters.Lookup(uint32(0), &kd); err == nil {
 						metricsData.KernelDrops = kd
 					}
+				}
+				if metricsData.EventsReceived > 0 {
+					metricsData.KernelDropRate = float64(metricsData.KernelDrops) / float64(metricsData.EventsReceived)
+				} else {
+					metricsData.KernelDropRate = 0
 				}
 				// include probe matrix each flush
 				var keys []string; for k := range metricsData.ProbeStatus { keys = append(keys, k) }
@@ -211,8 +218,8 @@ func main() {
 				// TTL eviction
 				evict(time.Now())
 				// human log line
-				log.Printf("metrics eventsReceived=%d handshakesEmitted=%d correlationTimeouts=%d cacheEvictions=%d kernel_drops=%d", 
-					metricsData.EventsReceived, metricsData.HandshakesEmitted, metricsData.CorrelationTimeouts, metricsData.CacheEvictions, metricsData.KernelDrops)
+				log.Printf("metrics eventsReceived=%d handshakesEmitted=%d correlationTimeouts=%d cacheEvictions=%d kernel_drops=%d kernel_drop_rate=%.6f", 
+					metricsData.EventsReceived, metricsData.HandshakesEmitted, metricsData.CorrelationTimeouts, metricsData.CacheEvictions, metricsData.KernelDrops, metricsData.KernelDropRate)
 			}
 		}
 	}()
@@ -264,6 +271,9 @@ func main() {
 		}
 	}
 	// final summary
-	log.Printf("FINAL metrics eventsReceived=%d handshakesEmitted=%d correlationTimeouts=%d cacheEvictions=%d kernel_drops=%d", 
-		metricsData.EventsReceived, metricsData.HandshakesEmitted, metricsData.CorrelationTimeouts, metricsData.CacheEvictions, metricsData.KernelDrops)
+	if metricsData.EventsReceived > 0 {
+		metricsData.KernelDropRate = float64(metricsData.KernelDrops) / float64(metricsData.EventsReceived)
+	}
+	log.Printf("FINAL metrics eventsReceived=%d handshakesEmitted=%d correlationTimeouts=%d cacheEvictions=%d kernel_drops=%d kernel_drop_rate=%.6f", 
+		metricsData.EventsReceived, metricsData.HandshakesEmitted, metricsData.CorrelationTimeouts, metricsData.CacheEvictions, metricsData.KernelDrops, metricsData.KernelDropRate)
 }
