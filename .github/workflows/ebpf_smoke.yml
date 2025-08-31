@@ -24,8 +24,15 @@ jobs:
           # Build bpftool from source (apt package may be unavailable)
           git clone --recurse-submodules --depth 1 https://github.com/libbpf/bpftool.git /tmp/bpftool
           cd /tmp/bpftool/src
-          make
-          sudo make install
+          if make; then
+            sudo make install
+          else
+            echo "[!] bpftool source build failed; attempting fallback linux-tools install" >&2
+            sudo apt-get install -y --no-install-recommends linux-tools-common linux-tools-`uname -r` || true
+            if ! command -v bpftool >/dev/null 2>&1; then
+              echo "[!] bpftool still unavailable; build step will likely fail later" >&2
+            fi
+          fi
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
