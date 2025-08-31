@@ -123,28 +123,19 @@ if [ "$LOADGEN" = "hey" ]; then
     hey -z "$DURATION" -c "$CONCURRENCY" -disable-keepalive --http2=false "$TARGET_URL" || true
   fi
 elif [ "$LOADGEN" = "openssl_local" ]; then
-  # Local OpenSSL server & client hammer (no egress; deterministic)
   TMP_SSL_DIR=$(mktemp -d)
   pushd "$TMP_SSL_DIR" >/dev/null
-  echo "[*] Generating throwaway self-signed cert for local server"
+  echo "[*] Generating throwaway self-signed cert (localhost)"
   openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 1 -nodes -subj "/CN=localhost" >/dev/null 2>&1
-  echo "[*] Starting local openssl s_server on 127.0.0.1:8443"
+  echo "[*] Starting local openssl s_server :8443"
   openssl s_server -quiet -accept 8443 -cert cert.pem -key key.pem >/dev/null 2>&1 &
   SERVER_PID=$!
   popd >/dev/null
   trap 'kill $SERVER_PID 2>/dev/null || true; rm -rf "$TMP_SSL_DIR"' EXIT
   sleep 1
-  echo "[*] Hammering local server with openssl s_client (duration $DURATION concurrency $CONCURRENCY)"
-  total_s=${DURATION%s}; [ "$total_s" -lt 1 ] && total_s=1
-  end=$(( $(date +%s) + total_s ))
-  iter=0
-  while [ $(date +%s) -lt $end ]; do
-    iter=$((iter+1))
-    seq 1 $CONCURRENCY | xargs -P "$CONCURRENCY" -I{} bash -c 'timeout 2s openssl s_client -connect 127.0.0.1:8443 -servername localhost </dev/null >/dev/null 2>&1 || true'
-    if (( iter % 5 == 0 )); then echo "[*] openssl_local loop iteration $iter"; fi
-  done
-  # Give the server a moment to finish any final handshakes
-  sleep 1
+  OPS=$(( CONCURRENCY * 10 ))
+  echo "[*] openssl_local generator (OPS=${OPS} concurrency=${CONCURRENCY})"
+  seq 1 "$OPS" | xargs -P "$CONCURRENCY" -I{} bash -c 'timeout 2s openssl s_client -connect 127.0.0.1:8443 -servername localhost </dev/null >/dev/null 2>&1 || true'
   kill $SERVER_PID 2>/dev/null || true
 elif [ "$LOADGEN" = "curl" ]; then
   OPS=$(( CONCURRENCY * 10 ))
