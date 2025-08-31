@@ -21,7 +21,7 @@ jobs:
         run: |
           set -e
           sudo apt-get update
-          sudo apt-get install -y clang llvm make git jq libbpf-dev linux-headers-$(uname -r) build-essential libelf-dev zlib1g-dev golang-go
+          sudo apt-get install -y clang llvm make git jq curl libbpf-dev linux-headers-$(uname -r) build-essential libelf-dev zlib1g-dev golang-go
           go install github.com/rakyll/hey@latest
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Setup bpftool (composite action)
@@ -32,13 +32,13 @@ jobs:
         run: |
           cd carnot-agent/ebpf-core/go-loader
           go mod tidy
-      - name: Normal ring buffer run
-        run: bash scripts/ebpf_smoke_test.sh -m normal -d 10s -c 50
+      - name: Normal ring buffer run (curl loadgen)
+        run: bash scripts/ebpf_smoke_test.sh -m normal -d 10s -c 40 -g curl
       - name: Snapshot normal metrics
         run: |
           cp integrations/runtime/metrics.json integrations/runtime/metrics_normal.json || true
-      - name: Small ring buffer run (expect drops)
-        run: bash scripts/ebpf_smoke_test.sh -m small -d 20s -c 150
+      - name: Small ring buffer run (expect potential drops)
+        run: bash scripts/ebpf_smoke_test.sh -m small -d 20s -c 120 -g curl
       - name: Assert drop behavior
         run: |
           echo "Asserting drop expectations (normal vs small)"
