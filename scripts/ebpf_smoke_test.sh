@@ -41,7 +41,7 @@ sudo test -r "$LIBSSL_PATH" || { echo "Cannot read $LIBSSL_PATH (adjust -libssl 
 pushd "$OBJ_DIR" >/dev/null
 make clean || true
 if [ "$MODE" = "small" ]; then
-  echo "[*] Building SMALL_RB variant"
+  echo "[*] Building SMALL_RB variant (8KB ring buffer)"
   make BPF_CFLAGS="-O2 -g -target bpf -D__TARGET_ARCH_x86 -DSMALL_RB"
 else
   make
@@ -63,8 +63,20 @@ echo "[*] Loader PID $LOADER_PID"
 sleep 1
 
 echo "[*] Generating HTTPS traffic"
-hey -z "$DURATION" -c "$CONCURRENCY" -disable-keepalive https://example.org || true
-sleep 5
+if [ "$MODE" = "small" ]; then
+  # Multiple short bursts to increase burstiness and trigger drops
+  for i in $(seq 1 4); do
+    hey -z "$(( ${DURATION%s} / 4 ))s" -c $(( CONCURRENCY * 2 )) -disable-keepalive https://example.org || true
+  done
+else
+  hey -z "$DURATION" -c "$CONCURRENCY" -disable-keepalive https://example.org || true
+fi
+if [ "$MODE" = "small" ]; then
+  # Allow extra time for periodic metrics flush (5s interval) after bursts
+  sleep 6
+else
+  sleep 5
+fi
 sudo kill "$LOADER_PID" || true
 wait "$LOADER_PID" 2>/dev/null || true
 

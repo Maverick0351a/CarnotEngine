@@ -14,7 +14,8 @@ struct event_t {
 };
 // Ring buffer size can be reduced (for drop testing) by compiling with -DSMALL_RB
 #ifdef SMALL_RB
-struct { __uint(type, BPF_MAP_TYPE_RINGBUF); __uint(max_entries, 32*1024);} events SEC(".maps");
+// Aggressively small ring buffer to force reservation failures during test
+struct { __uint(type, BPF_MAP_TYPE_RINGBUF); __uint(max_entries, 8*1024);} events SEC(".maps");
 #else
 struct { __uint(type, BPF_MAP_TYPE_RINGBUF); __uint(max_entries, 512*1024);} events SEC(".maps");
 #endif
