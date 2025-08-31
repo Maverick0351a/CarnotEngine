@@ -165,6 +165,8 @@ func main() {
 	probes := []probe{
 		{"SSL_do_handshake", false, "SSL_do_handshake_enter"},
 		{"SSL_do_handshake", true,  "SSL_do_handshake_exit"},
+		{"SSL_connect", false, "SSL_connect_enter"},
+		{"SSL_connect", true,  "SSL_connect_exit"},
 		{"SSL_set_tlsext_host_name", false, "SSL_set_tlsext_host_name_enter"},
 		{"SSL_CTX_set1_groups_list", false, "SSL_CTX_set1_groups_list_enter"},
 		// optional negotiated-group probes
