@@ -45,6 +45,11 @@ jobs:
           sudo apt-get install -y clang llvm make golang-go jq libbpf-dev linux-headers-$(uname -r)
           go install github.com/rakyll/hey@latest
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+      - name: Go module tidy (generate go.sum)
+        run: |
+          cd carnot-agent/ebpf-core/go-loader
+          go mod tidy
+          ls -l go.mod go.sum
       - name: Build eBPF & loader
         run: |
           cd carnot-agent/ebpf-core
