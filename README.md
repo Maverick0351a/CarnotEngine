@@ -1,13 +1,30 @@
 # CarnotEngine
 
+> Runtime cryptographic inventory → Policy → Attestation → Continuous PQC migration readiness.
+
 Carnot Engine is the quantum‑safe transition control plane: it discovers where your organization uses cryptography (code, runtime, network, PKI/KMS), quantifies Harvest‑Now‑Decrypt‑Later (HNDL) risk, enforces policy‑as‑code, and produces audit‑ready attestations mapped to mandates (e.g., OMB M‑23‑02, NIST FIPS 203/204/205).
+
+**Live Site:** (Cloudflare Pages) https://carnotengine-site.pages.dev  
+**Samples:** [Sample Attestation (MD)](docs/samples/sample_attestation.md) · [Attestation JSON](docs/samples/sample_attestation.json) · [PCAP Walkthrough](docs/samples/pcap_walkthrough.html)
+
+### Quick Pipeline (4 Stages)
+1. **Runtime Capture** – eBPF/ETW/JFR observe live TLS handshakes (SNI, groups, negotiated group, outcomes) with low overhead.
+2. **CryptoBOM** – Normalize & hash observations (bom_ref) for diffing, merging cloud PKI/KMS + static code findings.
+3. **Policy Gate** – OPA/Rego evaluates PQC readiness & crypto hygiene (RSA size, legacy hashes, hybrid support, tagging).
+4. **Attestation** – Machine (JSON) + human (Markdown) bundle (soon: signed) exposing HNDL % & mandate mapping.
+
+---
 
 ## Overview
 
 This consolidated repository merges the Deepthink kit with runnable scaffolding (agents, CLI, attest, merge, proxy, integrations) to prototype runtime-to-BOM correlation using eBPF, plus policy and assessment tooling.
 
-Key implemented item (current prototype focus):
-- OpenSSL handshake correlation (TID-keyed) emitting aggregated JSON lines with SNI, groups, success flag, and metrics (eventsReceived, handshakesEmitted, correlationTimeouts, cacheEvictions, kernel_drops).
+Current prototype focus:
+- OpenSSL handshake correlation (TID-keyed) emitting aggregated JSON lines with SNI, offered groups, negotiated group & metrics (eventsReceived, handshakesEmitted, correlationTimeouts, cacheEvictions, kernel_drops).
+- Runtime → CryptoBOM conversion utility (`integrations/runtime/ebpf_to_bom.py`).
+- AWS KMS / ACM inventory with tag enrichment & tests.
+- OPA policy gate (warn mode) + remediation guide.
+- Attestation API scaffold (FastAPI) & published sample artifacts.
 
 See `WORKLOG.md` and `COPILOT/` tasks for incremental progress and guidance.
 
@@ -74,11 +91,21 @@ Identity merge rules link SNI ⇄ ACM certs and apply tag→context enrichment (
 
 ## Roadmap Snapshot (High Level)
 - [x] Basic eBPF handshake correlation & metrics
-- [ ] Runtime → CryptoBOM merging
+- [x] Runtime → CryptoBOM conversion (initial)
+- [x] AWS PKI/KMS inventory + tests
+- [x] Policy gate (warn) with remediation outputs
+- [x] Site + sample attestation & PCAP walkthrough
 - [ ] Static scan enrichment & identity linkage
-- [ ] Policy gate CI integration hardening
-- [ ] Attestation signer & mandate mapping automation
+- [ ] Full merged BOM & identity correlation
+- [ ] Attestation signing (Sigstore / keyless) & mandate mapping automation
 - [ ] PQC interop automation & evidence capture
+- [ ] Hybrid group mapping completeness & drift diff UI
+
+## Short About (Copy/Paste for Repo Sidebar)
+CarnotEngine: runtime cryptography visibility, PQC readiness scoring, policy‑as‑code, and signed attestation (in progress) — bridging eBPF TLS telemetry, cloud PKI/KMS, and OPA policies into a unified CryptoBOM.
+
+Alternate minimal tagline:
+Runtime crypto inventory → PQC readiness → Attestation.
 
 ## Contributing
 Early prototype stage; issues & PRs welcome once initial scaffolding stabilizes.
