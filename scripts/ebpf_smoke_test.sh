@@ -12,6 +12,7 @@ LIBSSL_PATH="/lib/x86_64-linux-gnu/libssl.so.3"
 MODE="normal" # or small
 DURATION="20s"
 CONCURRENCY=100
+LOADER_EXTRA_ARGS="${LOADER_EXTRA_ARGS:-}"
 
 usage(){ cat <<EOF
 Usage: $0 [-m normal|small] [-d duration] [-c concurrency]
@@ -57,7 +58,7 @@ sudo "$LOADER_DIR"/bin/carnot-ebpf-loader \
   -obj "$OBJ_DIR"/openssl_handshake.bpf.o \
   -out "$OUT_JSON" \
   -metrics "$METRICS_JSON" \
-  -libssl "$LIBSSL_PATH" &
+  -libssl "$LIBSSL_PATH" $LOADER_EXTRA_ARGS &
 LOADER_PID=$!
 echo "[*] Loader PID $LOADER_PID"
 sleep 1
