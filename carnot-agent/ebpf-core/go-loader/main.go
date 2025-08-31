@@ -9,11 +9,13 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+    "runtime"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -71,6 +73,10 @@ type metrics struct {
 	P95DurationMs       float64 `json:"p95DurationMs"`
 	P99DurationMs       float64 `json:"p99DurationMs"`
 	ProbeStatus         map[string]string `json:"probe_status"`
+	BuildGitSHA         string  `json:"build_git_sha,omitempty"`
+	BpfToolVersion      string  `json:"bpftool_version,omitempty"`
+	GoVersion           string  `json:"go_version,omitempty"`
+	BuildHost           string  `json:"build_host,omitempty"`
 }
 
 func groupName(id int32) string {
@@ -159,6 +165,17 @@ func main() {
 	cache := map[uint64]*partial{}
 	var mu sync.Mutex
 	metricsData := &metrics{ProbeStatus: probeStatus}
+	// Populate build/environment metadata (non-fatal best-effort)
+	metricsData.BuildGitSHA = os.Getenv("GITHUB_SHA")
+	if metricsData.BuildGitSHA == "" { metricsData.BuildGitSHA = os.Getenv("COMMIT_SHA") }
+	if metricsData.BuildGitSHA == "" {
+		if out, err := exec.Command("git", "rev-parse", "HEAD").Output(); err == nil { metricsData.BuildGitSHA = strings.TrimSpace(string(out)) }
+	}
+	if out, err := exec.Command("bpftool", "version").Output(); err == nil {
+		metricsData.BpfToolVersion = strings.TrimSpace(string(out))
+	}
+	metricsData.GoVersion = runtime.Version()
+	if h, err := os.Hostname(); err == nil { metricsData.BuildHost = h }
 	durations := make([]float64, 0, 4096)
 
 	evict := func(now time.Time){
