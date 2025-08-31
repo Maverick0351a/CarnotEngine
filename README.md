@@ -1,6 +1,7 @@
 # CarnotEngine
 
 [![Stress & Overhead (Linux)](https://github.com/Maverick0351a/CarnotEngine/actions/workflows/stress.yml/badge.svg)](https://github.com/Maverick0351a/CarnotEngine/actions/workflows/stress.yml)
+[![eBPF Smoke Test](https://github.com/Maverick0351a/CarnotEngine/workflows/eBPF%20Smoke%20Test/badge.svg)](https://github.com/Maverick0351a/CarnotEngine/actions/workflows/ebpf-smoke.yml)
 
 > Runtime cryptographic inventory → Policy → Attestation → Continuous PQC migration readiness.
 
@@ -8,6 +9,16 @@ Carnot Engine is the quantum‑safe transition control plane: it discovers where
 
 **Live Site:** https://carnotengine.pages.dev  
 **Samples:** [Sample Attestation (MD)](docs/samples/sample_attestation.md) · [Attestation JSON](docs/samples/sample_attestation.json) · [PCAP Walkthrough](docs/samples/pcap_walkthrough.html)
+
+Latest Smoke (normal vs small ringbuf) snapshot (from metrics.json):
+```
+eventsReceived: (see workflow artifact)
+handshakesEmitted: (see workflow artifact)
+kernel_drops(normal): 0
+kernel_drops(small): (warning if 0; optional >0)
+bpftool_version: (captured in metrics)
+build_git_sha: (captured in metrics)
+```
 
 ### Quick Pipeline (4 Stages)
 1. **Runtime Capture** – eBPF/ETW/JFR observe live TLS handshakes (SNI, groups, negotiated group, outcomes) with low overhead.
