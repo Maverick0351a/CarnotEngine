@@ -1,6 +1,5 @@
 package main
 import (
-import (
 	"bytes"
 	"context"
 	"encoding/binary"
