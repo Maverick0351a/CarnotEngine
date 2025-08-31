@@ -1,0 +1,59 @@
+name: eBPF Smoke Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'carnot-agent/ebpf-core/openssl_handshake.bpf.c'
+      - 'carnot-agent/ebpf-core/go-loader/**'
+      - 'scripts/ebpf_smoke_test.sh'
+      - '.github/workflows/ebpf-smoke.yml'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y clang llvm make git jq libbpf-dev linux-headers-$(uname -r) build-essential libelf-dev zlib1g-dev
+          if ! sudo apt-get install -y bpftool; then
+            echo "bpftool pkg fallback build";
+            git clone --depth 1 https://github.com/libbpf/bpftool.git /tmp/bpftool-src
+            make -C /tmp/bpftool-src/src
+            sudo cp /tmp/bpftool-src/src/bpftool /usr/local/bin/
+          fi
+          sudo apt-get install -y golang-go
+          go install github.com/rakyll/hey@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+      - name: Go mod tidy
+        run: |
+          cd carnot-agent/ebpf-core/go-loader
+          go mod tidy
+      - name: Normal ring buffer run
+        run: bash scripts/ebpf_smoke_test.sh -m normal -d 10s -c 50
+      - name: Small ring buffer run (expect drops)
+        run: bash scripts/ebpf_smoke_test.sh -m small -d 10s -c 50
+      - name: Collect artifacts
+        run: |
+          mkdir -p smoke-artifacts
+          cp integrations/runtime/metrics.json smoke-artifacts/metrics_small_or_last.json || true
+          cp integrations/runtime/runtime.jsonl smoke-artifacts/runtime_small_or_last.jsonl || true
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ebpf-smoke
+          path: smoke-artifacts
+      - name: Append summary
+        run: |
+          echo '### eBPF Smoke Test' >> $GITHUB_STEP_SUMMARY
+          if [ -f integrations/runtime/metrics.json ]; then
+            echo '\n```json' >> $GITHUB_STEP_SUMMARY
+            cat integrations/runtime/metrics.json >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
