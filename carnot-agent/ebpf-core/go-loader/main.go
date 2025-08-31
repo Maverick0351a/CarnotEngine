@@ -10,14 +10,14 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
-	// negotiated group accessor (stub or cgo implementation)
-	"carnotengine/ebpf-loader/negotiated"
 )
 
 type event struct {
@@ -43,7 +43,6 @@ type handshake struct {
 	SNI           string   `json:"sni,omitempty"`
 	Groups        []string `json:"groups_offered,omitempty"`
 	GroupSelected string   `json:"group_selected,omitempty"`
-	NegotiatedGrp string   `json:"negotiated_group,omitempty"`
 	Success       bool     `json:"success"`
 	SSLPtr        string   `json:"ssl_ptr,omitempty"`
 	DurationMs    float64  `json:"duration_ms,omitempty"`
@@ -70,6 +69,7 @@ type metrics struct {
 	HandshakesNoSNI     uint64  `json:"handshakesNoSNI"`
 	P95DurationMs       float64 `json:"p95DurationMs"`
 	P99DurationMs       float64 `json:"p99DurationMs"`
+	ProbeStatus         map[string]string `json:"probe_status"`
 }
 
 func groupName(id int32) string {
@@ -122,15 +122,30 @@ func main() {
 		{"tls1_shared_group", true, "tls1_shared_group_exit"},
 		{"tls1_get_shared_group", true, "tls1_get_shared_group_exit"},
 	}
+	probeStatus := make(map[string]string)
 	for _, p := range probes {
 		prog := coll.Programs[p.prog]
-		if prog == nil { continue }
+		if prog == nil { probeStatus[p.sym] = "missing"; continue }
 		if p.ret {
-			if _, err := exe.Uretprobe(p.sym, prog, nil); err != nil { continue }
+			if _, err := exe.Uretprobe(p.sym, prog, nil); err != nil {
+				probeStatus[p.sym] = "error"
+			} else { probeStatus[p.sym] = "ok" }
 		} else {
-			if _, err := exe.Uprobe(p.sym, prog, nil); err != nil { continue }
+			if _, err := exe.Uprobe(p.sym, prog, nil); err != nil {
+				probeStatus[p.sym] = "error"
+			} else { probeStatus[p.sym] = "ok" }
 		}
 	}
+	// Record unused negotiated-group probes explicitly if not already in map
+	for _, sym := range []string{"SSL_get_negotiated_group","SSL_get_shared_group","tls1_shared_group","tls1_get_shared_group"} {
+		if _, ok := probeStatus[sym]; !ok { probeStatus[sym] = "missing" }
+	}
+	// Build and log probe matrix line
+	var keys []string; for k := range probeStatus { keys = append(keys, k) }
+	sort.Strings(keys)
+	var bldr []string
+	for _, k := range keys { bldr = append(bldr, fmt.Sprintf("%s=%s", k, probeStatus[k])) }
+	log.Printf("probe matrix: %s", strings.Join(bldr, ","))
 
 	rd, err := ringbuf.NewReader(events); if err != nil { log.Fatalf("ringbuf: %v", err) }
 	defer rd.Close()
@@ -142,7 +157,7 @@ func main() {
 	key := func(tid uint32) uint64 { return uint64(tid) }
 	cache := map[uint64]*partial{}
 	var mu sync.Mutex
-	metricsData := &metrics{}
+	metricsData := &metrics{ProbeStatus: probeStatus}
 	durations := make([]float64, 0, 4096)
 
 	evict := func(now time.Time){
@@ -182,6 +197,12 @@ func main() {
 						metricsData.KernelDrops = kd
 					}
 				}
+				// include probe matrix each flush
+				var keys []string; for k := range metricsData.ProbeStatus { keys = append(keys, k) }
+				sort.Strings(keys)
+				var bldr []string
+				for _, k := range keys { bldr = append(bldr, fmt.Sprintf("%s=%s", k, metricsData.ProbeStatus[k])) }
+				log.Printf("probe matrix: %s", strings.Join(bldr, ","))
 				// write metrics JSON (best-effort)
 				b, _ := json.MarshalIndent(metricsData, "", "  ")
 				tmp := metricsPath + ".tmp"
@@ -221,13 +242,14 @@ func main() {
 				p.sni = sni; p.sslptr = fmt.Sprintf("0x%x", evt.SslPtr)
 			case 3: // GROUPS_SET
 				if gr != "" { p.groups = append(p.groups, gr) }
+			case 4: // GROUP_SELECTED
+				if evt.GroupID != 0 { p.groupSelected = groupName(evt.GroupID) }
 			case 1: // HANDSHAKE_RET
 				hs := handshake{
 					Pid: pid, Tid: tid, Proc: proc,
 					Time: time.Unix(0, int64(evt.TsNs)).UTC().Format(time.RFC3339Nano),
 					SNI: p.sni, Groups: p.groups, GroupSelected: p.groupSelected, Success: evt.Success, SSLPtr: p.sslptr,
 				}
-				if ng, ok := negotiated.Lookup(libssl, p.sslptr); ok { hs.NegotiatedGrp = ng }
 				if evt.DurationNs > 0 {
 					hs.DurationMs = float64(evt.DurationNs)/1e6
 					durations = append(durations, hs.DurationMs)
