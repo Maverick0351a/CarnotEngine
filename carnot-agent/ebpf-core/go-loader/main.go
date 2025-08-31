@@ -174,6 +174,8 @@ func main() {
 		{"SSL_do_handshake", true,  "SSL_do_handshake_exit"},
 		{"SSL_connect", false, "SSL_connect_enter"},
 		{"SSL_connect", true,  "SSL_connect_exit"},
+		{"SSL_connect_ex", false, "SSL_connect_ex_enter"},
+		{"SSL_connect_ex", true,  "SSL_connect_ex_exit"},
 		{"SSL_accept", false, "SSL_accept_enter"},
 		{"SSL_accept", true,  "SSL_accept_exit"},
 		{"SSL_set_tlsext_host_name", false, "SSL_set_tlsext_host_name_enter"},

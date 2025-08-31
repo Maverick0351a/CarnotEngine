@@ -29,6 +29,8 @@ static __inline __u32 get_tid(){ return (__u32)bpf_get_current_pid_tgid(); }
 SEC("uprobe//libssl.so.3:SSL_do_handshake") int BPF_KPROBE(SSL_do_handshake_enter){ __u64 p=(__u64)PT_REGS_PARM1(ctx); __u32 tid=get_tid(); bpf_map_update_elem(&active_ssl,&tid,&p,BPF_ANY); return 0; }
 // Many OpenSSL users (e.g., curl via libcurl) invoke SSL_connect instead of SSL_do_handshake directly.
 SEC("uprobe//libssl.so.3:SSL_connect") int BPF_KPROBE(SSL_connect_enter){ __u64 p=(__u64)PT_REGS_PARM1(ctx); __u32 tid=get_tid(); bpf_map_update_elem(&active_ssl,&tid,&p,BPF_ANY); return 0; }
+// Some versions call SSL_connect_ex
+SEC("uprobe//libssl.so.3:SSL_connect_ex") int BPF_KPROBE(SSL_connect_ex_enter){ __u64 p=(__u64)PT_REGS_PARM1(ctx); __u32 tid=get_tid(); bpf_map_update_elem(&active_ssl,&tid,&p,BPF_ANY); return 0; }
 // Server side
 SEC("uprobe//libssl.so.3:SSL_accept") int BPF_KPROBE(SSL_accept_enter){ __u64 p=(__u64)PT_REGS_PARM1(ctx); __u32 tid=get_tid(); bpf_map_update_elem(&active_ssl,&tid,&p,BPF_ANY); return 0; }
 SEC("uretprobe//libssl.so.3:SSL_do_handshake") int BPF_KRETPROBE(SSL_do_handshake_exit, int ret){
@@ -39,6 +41,15 @@ SEC("uretprobe//libssl.so.3:SSL_do_handshake") int BPF_KRETPROBE(SSL_do_handshak
   bpf_ringbuf_submit(e,0); count_inc(0); if(pssl) bpf_map_delete_elem(&active_ssl,&tid); return 0; }
 SEC("uretprobe//libssl.so.3:SSL_connect")
 int BPF_KRETPROBE(SSL_connect_exit, int ret){
+  __u32 tid=get_tid(); __u64 *pssl=bpf_map_lookup_elem(&active_ssl,&tid);
+  struct event_t *e=bpf_ringbuf_reserve(&events,sizeof(*e),0); if(!e){ drop_inc(); return 0; }
+  e->ts_ns=bpf_ktime_get_ns(); __u64 pt=bpf_get_current_pid_tgid(); e->pid=pt>>32; e->tid=(__u32)pt; bpf_get_current_comm(&e->comm,sizeof(e->comm));
+  e->kind=EVT_HANDSHAKE_RET; e->success=(ret==1); e->ssl_ptr=pssl?*pssl:0; e->sni[0]='\0'; e->groups[0]='\0'; e->group_id=-1;
+  bpf_ringbuf_submit(e,0); count_inc(0); if(pssl) bpf_map_delete_elem(&active_ssl,&tid); return 0;
+}
+
+SEC("uretprobe//libssl.so.3:SSL_connect_ex")
+int BPF_KRETPROBE(SSL_connect_ex_exit, int ret){
   __u32 tid=get_tid(); __u64 *pssl=bpf_map_lookup_elem(&active_ssl,&tid);
   struct event_t *e=bpf_ringbuf_reserve(&events,sizeof(*e),0); if(!e){ drop_inc(); return 0; }
   e->ts_ns=bpf_ktime_get_ns(); __u64 pt=bpf_get_current_pid_tgid(); e->pid=pt>>32; e->tid=(__u32)pt; bpf_get_current_comm(&e->comm,sizeof(e->comm));
