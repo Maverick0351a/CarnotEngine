@@ -64,9 +64,15 @@ sleep 1
 
 echo "[*] Generating HTTPS traffic"
 if [ "$MODE" = "small" ]; then
-  # Multiple short bursts to increase burstiness and trigger drops
-  for i in $(seq 1 4); do
-    hey -z "$(( ${DURATION%s} / 4 ))s" -c $(( CONCURRENCY * 2 )) -disable-keepalive https://example.org || true
+  # Multiple short high-concurrency bursts to trigger ringbuf reservation failures
+  TOTAL=${DURATION%s}
+  [ "$TOTAL" -lt 8 ] && TOTAL=8
+  BURSTS=6
+  PER=$(( TOTAL / BURSTS ))
+  [ "$PER" -lt 1 ] && PER=1
+  echo "[*] Small mode: TOTAL=${TOTAL}s BURSTS=${BURSTS} PER=${PER}s concurrency=$(( CONCURRENCY * 3 ))"
+  for i in $(seq 1 $BURSTS); do
+    hey -z "${PER}s" -c $(( CONCURRENCY * 3 )) -disable-keepalive https://example.org || true
   done
 else
   hey -z "$DURATION" -c "$CONCURRENCY" -disable-keepalive https://example.org || true

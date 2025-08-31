@@ -34,18 +34,23 @@ jobs:
           go mod tidy
       - name: Normal ring buffer run
         run: bash scripts/ebpf_smoke_test.sh -m normal -d 10s -c 50
+      - name: Snapshot normal metrics
+        run: |
+          cp integrations/runtime/metrics.json integrations/runtime/metrics_normal.json || true
       - name: Small ring buffer run (expect drops)
-        run: bash scripts/ebpf_smoke_test.sh -m small -d 10s -c 50
+        run: bash scripts/ebpf_smoke_test.sh -m small -d 20s -c 150
       - name: Assert drop behavior
         run: |
-          echo "Asserting drop expectations from small ring buffer test"
-          if [ ! -f integrations/runtime/metrics.json ]; then echo "metrics.json missing"; exit 1; fi
-          cat integrations/runtime/metrics.json
-          DROPS=$(jq -r '.kernel_drops // 0' integrations/runtime/metrics.json)
-          RATE=$(jq -r '.kernel_drop_rate // 0' integrations/runtime/metrics.json)
-          if [ "$DROPS" -eq 0 ]; then echo "Expected >0 kernel_drops in SMALL_RB run"; exit 1; fi
-          if (( $(echo "$RATE <= 0" | bc -l) )); then echo "Expected positive kernel_drop_rate"; exit 1; fi
-          echo "OK: kernel_drops=$DROPS kernel_drop_rate=$RATE"
+          echo "Asserting drop expectations (normal vs small)"
+          if [ ! -f integrations/runtime/metrics_normal.json ]; then echo "normal metrics missing"; exit 1; fi
+          if [ ! -f integrations/runtime/metrics.json ]; then echo "small metrics missing"; exit 1; fi
+          echo "--- Normal metrics ---"; cat integrations/runtime/metrics_normal.json
+          echo "--- Small metrics ---"; cat integrations/runtime/metrics.json
+          N_DROPS=$(jq -r '.kernel_drops // 0' integrations/runtime/metrics_normal.json)
+          S_DROPS=$(jq -r '.kernel_drops // 0' integrations/runtime/metrics.json)
+          if [ "$N_DROPS" -ne 0 ]; then echo "Expected 0 normal-mode drops, saw $N_DROPS"; exit 1; fi
+          if [ "$S_DROPS" -eq 0 ]; then echo "Expected >0 kernel_drops in SMALL_RB run"; exit 1; fi
+          echo "OK: normal drops=$N_DROPS small drops=$S_DROPS"
       - name: Collect artifacts
         run: |
           mkdir -p smoke-artifacts
