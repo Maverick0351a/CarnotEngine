@@ -42,7 +42,7 @@ jobs:
             make -C /tmp/bpftool-src/src
             sudo cp /tmp/bpftool-src/src/bpftool /usr/local/bin/
           fi
-          sudo apt-get install -y clang llvm make golang-go jq
+          sudo apt-get install -y clang llvm make golang-go jq libbpf-dev linux-headers-$(uname -r)
           go install github.com/rakyll/hey@latest
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Build eBPF & loader

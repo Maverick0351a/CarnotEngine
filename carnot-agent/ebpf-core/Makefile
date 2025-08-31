@@ -1,7 +1,13 @@
 BPF_CLANG ?= clang
 BPFTOOL ?= bpftool
+BPF_CFLAGS := -O2 -g -target bpf -D__TARGET_ARCH_x86 -I. -I/usr/include -I/usr/include/bpf
 
-all: vmlinux.h openssl_handshake.bpf.o
+all: headers_check vmlinux.h openssl_handshake.bpf.o
+
+headers_check:
+	@if [ ! -f /usr/include/bpf/bpf_helpers.h ]; then \
+		echo "ERROR: Missing /usr/include/bpf/bpf_helpers.h (install libbpf-dev)"; exit 1; \
+	fi
 
 vmlinux.h:
 	@if [ ! -f vmlinux.h ]; then \
@@ -11,7 +17,7 @@ vmlinux.h:
 	fi
 
 openssl_handshake.bpf.o: openssl_handshake.bpf.c vmlinux.h
-	$(BPF_CLANG) -O2 -g -target bpf -D__TARGET_ARCH_x86 -I. -c openssl_handshake.bpf.c -o openssl_handshake.bpf.o
+	$(BPF_CLANG) $(BPF_CFLAGS) -c openssl_handshake.bpf.c -o openssl_handshake.bpf.o
 
 .PHONY: clean
 clean:
