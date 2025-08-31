@@ -7,6 +7,10 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"crypto/sha256"
+	"crypto/hmac"
+	"encoding/hex"
+	"encoding/base64"
 	"log"
 	"os"
 	"os/exec"
@@ -43,6 +47,7 @@ type handshake struct {
 	Proc          string   `json:"proc"`
 	Time          string   `json:"time"`
 	SNI           string   `json:"sni,omitempty"`
+	SNIHash       string   `json:"sni_hash,omitempty"`
 	Groups        []string `json:"groups_offered,omitempty"`
 	GroupSelected string   `json:"group_selected,omitempty"`
 	Success       bool     `json:"success"`
@@ -96,14 +101,53 @@ func groupName(id int32) string {
 func main() {
 	var objPath, libssl, outPath, metricsPath string
 	var evictTTL time.Duration
+	var hashSNIMode, hashIPMode, hashKeyStr string
 	flag.StringVar(&objPath, "obj", "openssl_handshake.bpf.o", "BPF object path")
 	flag.StringVar(&libssl, "libssl", "/lib/x86_64-linux-gnu/libssl.so.3", "libssl.so.3 path")
 	flag.StringVar(&outPath, "out", "runtime.jsonl", "Aggregated output JSONL (one per handshake)")
 	flag.StringVar(&metricsPath, "metrics", "metrics.json", "Metrics JSON path (periodically written)")
 	flag.DurationVar(&evictTTL, "evict-ttl", 2*time.Second, "Correlation TTL for partial handshakes")
+	flag.StringVar(&hashSNIMode, "hash-sni", "none", "Hash mode for SNI: none|sha256|hmac")
+	flag.StringVar(&hashIPMode, "hash-ip", "none", "Hash mode for client/server IPs (future): none|sha256|hmac")
+	flag.StringVar(&hashKeyStr, "hash-key", "", "Key (hex or base64) for HMAC when hash-* mode is hmac")
 	// metrics log interval is fixed at 5s per requirements, but allow override via env in future if needed.
 	flushInterval := 5 * time.Second
 	flag.Parse()
+
+	parseKey := func(k string) ([]byte, error) {
+		if k == "" { return nil, fmt.Errorf("empty key") }
+		// try hex
+		if b, err := hex.DecodeString(k); err == nil { return b, nil }
+		// try base64 std
+		if b, err := base64.StdEncoding.DecodeString(k); err == nil { return b, nil }
+		// try base64 URL
+		if b, err := base64.URLEncoding.DecodeString(k); err == nil { return b, nil }
+		return nil, fmt.Errorf("unable to decode key (expect hex or base64)")
+	}
+
+	if hashSNIMode != "none" && hashSNIMode != "sha256" && hashSNIMode != "hmac" { log.Fatalf("invalid --hash-sni mode: %s", hashSNIMode) }
+	if hashIPMode != "none" && hashIPMode != "sha256" && hashIPMode != "hmac" { log.Fatalf("invalid --hash-ip mode: %s", hashIPMode) }
+	var hmacKey []byte
+	if (hashSNIMode == "hmac" || hashIPMode == "hmac") {
+		if hashKeyStr == "" { log.Fatalf("--hash-key required for hmac mode") }
+		var err error
+		hmacKey, err = parseKey(hashKeyStr)
+		if err != nil { log.Fatalf("parse hash key: %v", err) }
+	}
+
+	hashBytes := func(data []byte, mode string) string {
+		if len(data) == 0 || mode == "none" { return "" }
+		if mode == "sha256" {
+			sum := sha256.Sum256(data)
+			return hex.EncodeToString(sum[:])
+		}
+		if mode == "hmac" {
+			h := hmac.New(sha256.New, hmacKey)
+			h.Write(data)
+			return hex.EncodeToString(h.Sum(nil))
+		}
+		return ""
+	}
 
 	spec, err := ebpf.LoadCollectionSpec(objPath)
 	if err != nil { log.Fatalf("load spec: %v", err) }
@@ -272,6 +316,11 @@ func main() {
 					Pid: pid, Tid: tid, Proc: proc,
 					Time: time.Unix(0, int64(evt.TsNs)).UTC().Format(time.RFC3339Nano),
 					SNI: p.sni, Groups: p.groups, GroupSelected: p.groupSelected, Success: evt.Success, SSLPtr: p.sslptr,
+				}
+				// Apply hashing for SNI if enabled
+				if hashSNIMode != "none" && hs.SNI != "" {
+					hs.SNIHash = hashBytes([]byte(hs.SNI), hashSNIMode)
+					hs.SNI = "" // remove plaintext
 				}
 				if evt.DurationNs > 0 {
 					hs.DurationMs = float64(evt.DurationNs)/1e6
