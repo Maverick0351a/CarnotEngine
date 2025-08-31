@@ -199,3 +199,22 @@ if [ -f "$METRICS_JSON" ]; then
     echo "[*] Metrics OK: eventsReceived=$EV handshakesEmitted=$HE"
   fi
 fi
+
+echo "[*] runtime.jsonl line count (handshake/event lines):"
+wc -l "$OUT_JSON" 2>/dev/null || true
+
+echo "[*] Metrics subset (normalized field names):"
+jq '{events_total: (.events_total // .eventsReceived), handshakes_emitted: (.handshakes_emitted // .handshakesEmitted), correlationTimeouts, kernel_drops, probe_status}' "$METRICS_JSON" 2>/dev/null || true
+
+# Also execute user-requested raw jq (may show nulls for alias fields but kept for acceptance)
+echo "[*] Raw jq (events_total, handshakes_emitted, correlationTimeouts, kernel_drops, probe_status):"
+jq '.events_total,.handshakes_emitted,.correlationTimeouts,.kernel_drops,.probe_status' "$METRICS_JSON" 2>/dev/null || true
+
+if [ "${HE:-0}" -lt 1 ]; then
+  echo "[!] No handshakes emitted. Diagnostics:" >&2
+  if [ "$LOADGEN" = "curl" ]; then
+    echo "--- curl -V ---"; curl -V || true
+  fi
+  echo "--- ldd of generator ($GEN_BIN) ---"; ldd "$(command -v "$GEN_BIN")" || true
+  echo "Tip: Try -g openssl_local to remove egress and backend ambiguity." >&2
+fi
