@@ -12,10 +12,12 @@ Progress:
 - [x] PCAP walkthrough HTML added (`docs/samples/pcap_walkthrough.html`).
 - [x] Deployment workflow added (`.github/workflows/site.yml`).
 - [x] WORKLOG updated.
-- [ ] Cloudflare secrets added & first deploy succeeded.
+- [x] Cloudflare secrets added & first deploy succeeded.
 
 Required GitHub Secrets:
 - `CLOUDFLARE_API_TOKEN` (Pages write token with Pages:Edit).
 - `CLOUDFLARE_ACCOUNT_ID` (account identifier from Cloudflare Dashboard > Workers & Pages > Overview).
 
-After adding secrets, push any change under `carnot-site/` to trigger deployment.
+Live URL: https://carnotengine.pages.dev  (Artifacts under `/docs/samples/`).
+
+Task 06 ACCEPTED.

@@ -4,7 +4,7 @@
 
 Carnot Engine is the quantum‑safe transition control plane: it discovers where your organization uses cryptography (code, runtime, network, PKI/KMS), quantifies Harvest‑Now‑Decrypt‑Later (HNDL) risk, enforces policy‑as‑code, and produces audit‑ready attestations mapped to mandates (e.g., OMB M‑23‑02, NIST FIPS 203/204/205).
 
-**Live Site:** (Cloudflare Pages) https://carnotengine-site.pages.dev  
+**Live Site:** https://carnotengine.pages.dev  
 **Samples:** [Sample Attestation (MD)](docs/samples/sample_attestation.md) · [Attestation JSON](docs/samples/sample_attestation.json) · [PCAP Walkthrough](docs/samples/pcap_walkthrough.html)
 
 ### Quick Pipeline (4 Stages)

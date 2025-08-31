@@ -40,4 +40,5 @@
 	- Published sample attestation artifacts (`docs/samples/sample_attestation.json`, `.md`).
 	- Added PCAP walkthrough (`docs/samples/pcap_walkthrough.html`).
 	- Added GitHub Actions workflow `.github/workflows/site.yml` to deploy to Cloudflare Pages (project: carnotengine-site).
-	- Pending: Set `CLOUDFLARE_ACCOUNT_ID` & `CLOUDFLARE_API_TOKEN` secrets; first push will publish.
+	- Deployed via Wrangler to Cloudflare Pages project `carnotengine`.
+	- Live URL: https://carnotengine.pages.dev (samples accessible under /docs/samples/).
