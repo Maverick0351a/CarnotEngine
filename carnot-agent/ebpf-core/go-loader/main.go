@@ -19,26 +19,32 @@ import (
 	"strings"
 	"sync"
 	"time"
-    "runtime"
+	"runtime"
+    "unsafe"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 )
 
+// event mirrors the exact memory layout of struct event_t in openssl_handshake.bpf.c
+// C struct event_t {
+//   __u64 ts_ns; __u32 pid; __u32 tid; char comm[16];
+//   __u8 kind; bool success; __u16 _pad; __u64 ssl_ptr;
+//   char sni[256]; char groups[128]; int group_id;
+// } (size 432 bytes)
 type event struct {
-	TsNs       uint64
-	Pid        uint32
-	Comm       [16]byte
-	Kind       uint8
-	Success    bool
-	_          [3]byte
-	SslPtr     uint64
-	Sni        [256]byte
-	Groups     [128]byte
-	Tid        uint32
-	DurationNs uint64
-	GroupID    int32
+	TsNs    uint64
+	Pid     uint32
+	Tid     uint32
+	Comm    [16]byte
+	Kind    uint8
+	Success bool
+	Pad     uint16
+	SslPtr  uint64
+	Sni     [256]byte
+	Groups  [128]byte
+	GroupID int32
 }
 
 type handshake struct {
@@ -295,11 +301,17 @@ func main() {
 	}()
 
 	var evt event
+	expectedSize := int(unsafe.Sizeof(event{}))
 	for {
 		rec, err := rd.Read()
 		if err != nil {
 			if err == ringbuf.ErrClosed { break }
 			metricsData.ReaderErrors++
+			continue
+		}
+		if len(rec.RawSample) != expectedSize {
+			metricsData.ReaderErrors++
+			log.Printf("skip event: size mismatch got=%d want=%d", len(rec.RawSample), expectedSize)
 			continue
 		}
 		if err := binary.Read(bytes.NewReader(rec.RawSample), binary.LittleEndian, &evt); err == nil {
@@ -331,10 +343,6 @@ func main() {
 				if hashSNIMode != "none" && hs.SNI != "" {
 					hs.SNIHash = hashBytes([]byte(hs.SNI), hashSNIMode)
 					hs.SNI = "" // remove plaintext
-				}
-				if evt.DurationNs > 0 {
-					hs.DurationMs = float64(evt.DurationNs)/1e6
-					durations = append(durations, hs.DurationMs)
 				}
 				enc, _ := json.Marshal(hs)
 				outf.Write(enc); outf.Write([]byte("\n"))
