@@ -55,7 +55,8 @@ jobs:
           cd carnot-agent/ebpf-core
           make all
           cd go-loader
-          go build -o bin/carnot-ebpf-loader ./...
+          mkdir -p bin
+          go build -o bin/carnot-ebpf-loader .
       - name: Run stress test
         run: |
           DURATION=${{ github.event.inputs.duration || '30' }}
