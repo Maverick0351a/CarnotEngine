@@ -114,7 +114,7 @@ gen_with_curl() {
     if (( iter % 5 == 0 )); then echo "[*] curl loop iteration $iter"; fi
     # fire a burst of concurrency background curls
     for i in $(seq 1 $CONCURRENCY); do
-      curl -sS --max-time 8 --http1.1 "$TARGET_URL" -o /dev/null &
+  curl -sS --max-time 8 --http1.1 --no-keepalive -H 'Connection: close' "$TARGET_URL" -o /dev/null &
     done
     wait
   done
@@ -127,7 +127,7 @@ gen_with_curl_small() {
   echo "[*] Small mode curl bursts: TOTAL=${total_s}s BURSTS=${bursts} PER=${per}s concurrency=$(( CONCURRENCY * 3 ))"
   for b in $(seq 1 $bursts); do
     for i in $(seq 1 $(( CONCURRENCY * 3 )) ); do
-      curl -sS --max-time 8 --http1.1 "$TARGET_URL" -o /dev/null &
+  curl -sS --max-time 8 --http1.1 --no-keepalive -H 'Connection: close' "$TARGET_URL" -o /dev/null &
     done
     wait
     sleep $per

@@ -28,7 +28,14 @@ static __always_inline void drop_inc(){ __u32 k=0; __u64 init=0; bpf_map_update_
 static __inline __u32 get_tid(){ return (__u32)bpf_get_current_pid_tgid(); }
 SEC("uprobe//libssl.so.3:SSL_do_handshake") int BPF_KPROBE(SSL_do_handshake_enter){ __u64 p=(__u64)PT_REGS_PARM1(ctx); __u32 tid=get_tid(); bpf_map_update_elem(&active_ssl,&tid,&p,BPF_ANY); return 0; }
 // Many OpenSSL users (e.g., curl via libcurl) invoke SSL_connect instead of SSL_do_handshake directly.
-SEC("uprobe//libssl.so.3:SSL_connect") int BPF_KPROBE(SSL_connect_enter){ __u64 p=(__u64)PT_REGS_PARM1(ctx); __u32 tid=get_tid(); bpf_map_update_elem(&active_ssl,&tid,&p,BPF_ANY); return 0; }
+SEC("uprobe//libssl.so.3:SSL_connect") int BPF_KPROBE(SSL_connect_enter){
+  __u64 p=(__u64)PT_REGS_PARM1(ctx); __u32 tid=get_tid(); bpf_map_update_elem(&active_ssl,&tid,&p,BPF_ANY);
+  // Debug/event path confirmation: emit a lightweight SNI_SET event even if SNI not yet set.
+  struct event_t *e=bpf_ringbuf_reserve(&events,sizeof(*e),0); if(!e){ drop_inc(); return 0; }
+  e->ts_ns=bpf_ktime_get_ns(); __u64 pt=bpf_get_current_pid_tgid(); e->pid=pt>>32; e->tid=(__u32)pt; bpf_get_current_comm(&e->comm,sizeof(e->comm));
+  e->kind=EVT_SNI_SET; e->success=false; e->ssl_ptr=p; e->sni[0]='\0'; e->groups[0]='\0'; e->group_id=-1;
+  bpf_ringbuf_submit(e,0); count_inc(0);
+  return 0; }
 // Some versions call SSL_connect_ex
 SEC("uprobe//libssl.so.3:SSL_connect_ex") int BPF_KPROBE(SSL_connect_ex_enter){ __u64 p=(__u64)PT_REGS_PARM1(ctx); __u32 tid=get_tid(); bpf_map_update_elem(&active_ssl,&tid,&p,BPF_ANY); return 0; }
 // Server side
