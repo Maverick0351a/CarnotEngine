@@ -8,7 +8,7 @@ OBJ_DIR="carnot-agent/ebpf-core"
 LOADER_DIR="carnot-agent/ebpf-core/go-loader"
 OUT_JSON="integrations/runtime/runtime.jsonl"
 METRICS_JSON="integrations/runtime/metrics.json"
-LIBSSL_PATH="/lib/x86_64-linux-gnu/libssl.so.3"
+LIBSSL_PATH="/lib/x86_64-linux-gnu/libssl.so.3" # default guess
 MODE="normal" # or small
 DURATION="20s"
 CONCURRENCY=100
@@ -47,7 +47,29 @@ else
 fi
 command -v jq >/dev/null || { echo "jq required"; exit 1; }
 
-sudo test -r "$LIBSSL_PATH" || { echo "Cannot read $LIBSSL_PATH (adjust -libssl path)"; exit 1; }
+# Auto-detect libssl if default missing
+detect_libssl() {
+  local c
+  if command -v curl >/dev/null; then
+    c=$(ldd "$(command -v curl)" 2>/dev/null | awk '/libssl.so/{print $3; exit}')
+    [ -n "$c" ] && [ -r "$c" ] && echo "$c" && return 0
+  fi
+  if command -v openssl >/dev/null; then
+    c=$(ldd "$(command -v openssl)" 2>/dev/null | awk '/libssl.so/{print $3; exit}')
+    [ -n "$c" ] && [ -r "$c" ] && echo "$c" && return 0
+  fi
+  for c in /usr/lib/*/libssl.so.* /lib/*/libssl.so.*; do [ -r "$c" ] && echo "$c" && return 0; done
+  return 1
+}
+if [ ! -r "$LIBSSL_PATH" ]; then
+  echo "[!] Default libssl not found, attempting detection" >&2
+  newp=$(detect_libssl || true)
+  if [ -n "$newp" ]; then LIBSSL_PATH="$newp"; echo "[+] Detected libssl: $LIBSSL_PATH"; fi
+fi
+if [ ! -r "$LIBSSL_PATH" ]; then
+  echo "[!] Could not read libssl; continuing but probes will fail" >&2
+fi
+echo "[*] Using libssl path: $LIBSSL_PATH"
 
 pushd "$OBJ_DIR" >/dev/null
 make clean || true
@@ -68,7 +90,7 @@ sudo "$LOADER_DIR"/bin/carnot-ebpf-loader \
   -obj "$OBJ_DIR"/openssl_handshake.bpf.o \
   -out "$OUT_JSON" \
   -metrics "$METRICS_JSON" \
-  -libssl "$LIBSSL_PATH" $LOADER_EXTRA_ARGS &
+  -libssl "$LIBSSL_PATH" $LOADER_EXTRA_ARGS 2>loader_stderr.log &
 LOADER_PID=$!
 echo "[*] Loader PID $LOADER_PID"
 sleep 1
@@ -129,6 +151,10 @@ wait "$LOADER_PID" 2>/dev/null || true
 
 echo "[*] Metrics summary:" 
 jq '{eventsReceived, handshakesEmitted, kernel_drops, kernel_drop_rate}' "$METRICS_JSON" || cat "$METRICS_JSON"
+
+echo "[*] Probe debug (symbols in libssl)"
+nm -D "$LIBSSL_PATH" 2>/dev/null | grep -E 'SSL_do_handshake$|SSL_set_tlsext_host_name$|SSL_CTX_set1_groups_list$|SSL_get_negotiated_group$|SSL_get_shared_group$|tls1_get_shared_group$|tls1_shared_group$' || echo "(nm scan failed)"
+echo "[*] Loader stderr (if any):"; sed -e 's/^/[loader-stderr] /' loader_stderr.log || true
 
 if [ "$MODE" = "small" ]; then
   echo "[*] Expect kernel_drops > 0 (SMALL_RB)"
