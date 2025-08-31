@@ -21,6 +21,8 @@ import (
 	"time"
 	"runtime"
     "unsafe"
+	"path/filepath"
+	"syscall"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -85,6 +87,7 @@ type metrics struct {
 	P99DurationMs       float64 `json:"p99DurationMs"`
 	ProbeStatus         map[string]string `json:"probe_status"`
 	ProbeErrors         map[string]string `json:"probe_errors,omitempty"`
+	ProbeStatusPaths    map[string]map[string]string `json:"probe_status_paths,omitempty"`
 	BuildGitSHA         string  `json:"build_git_sha,omitempty"`
 	BpfToolVersion      string  `json:"bpftool_version,omitempty"`
 	GoVersion           string  `json:"go_version,omitempty"`
@@ -166,8 +169,33 @@ func main() {
 	if events == nil { log.Fatalf("events ringbuf not found") }
 	dropCounters := coll.Maps["drop_counters"] // new map for ringbuf reserve drops
 
-	exe, err := link.OpenExecutable(libssl)
-	if err != nil { log.Fatalf("open executable: %v", err) }
+	// Multi-attach: discover all libssl.so.3 paths plus the provided one.
+	findLibs := func(primary string) []string {
+		candidates := []string{}
+		seen := map[string]struct{}{}
+		add := func(p string){ if p=="" {return}; if _,ok:=seen[p]; !ok { candidates = append(candidates, p); seen[p]=struct{}{} } }
+		add(primary)
+		searchDirs := []string{"/usr/lib/x86_64-linux-gnu","/lib/x86_64-linux-gnu","/usr/local/lib","/lib64"}
+		for _, d := range searchDirs {
+			matches, _ := filepath.Glob(filepath.Join(d, "libssl.so.3"))
+			for _, m := range matches { add(m) }
+		}
+		return candidates
+	}
+	libs := findLibs(libssl)
+	// Deduplicate by inode (dev+ino)
+	type di struct { dev uint64; ino uint64 }
+	unique := []string{}
+	seenInode := map[di]string{}
+	for _, p := range libs {
+		if st, err := os.Stat(p); err == nil {
+			if sys, ok := st.Sys().(*syscall.Stat_t); ok {
+				key := di{dev: uint64(sys.Dev), ino: uint64(sys.Ino)}
+				if _, exists := seenInode[key]; !exists { seenInode[key]=p; unique = append(unique, p) }
+			}
+		}
+	}
+	log.Printf("discovered libssl candidates (unique by inode): %v", unique)
 	type probe struct{ sym string; ret bool; prog string }
 	probes := []probe{
 		{"SSL_do_handshake", false, "SSL_do_handshake_enter"},
@@ -180,41 +208,61 @@ func main() {
 		{"SSL_accept", true,  "SSL_accept_exit"},
 		{"SSL_set_tlsext_host_name", false, "SSL_set_tlsext_host_name_enter"},
 		{"SSL_CTX_set1_groups_list", false, "SSL_CTX_set1_groups_list_enter"},
-		// optional negotiated-group probes
 		{"SSL_get_negotiated_group", true, "SSL_get_negotiated_group_exit"},
 		{"SSL_get_shared_group", true, "SSL_get_shared_group_exit"},
 		{"tls1_shared_group", true, "tls1_shared_group_exit"},
 		{"tls1_get_shared_group", true, "tls1_get_shared_group_exit"},
 	}
-	probeStatus := make(map[string]string)
-	probeErrors := make(map[string]string)
-	for _, p := range probes {
-		prog := coll.Programs[p.prog]
-		if prog == nil { probeStatus[p.sym] = "missing"; continue }
-		if p.ret {
-			if _, err := exe.Uretprobe(p.sym, prog, nil); err != nil {
-				probeStatus[p.sym] = "error"
-				probeErrors[p.sym] = err.Error()
-				log.Printf("attach uretprobe %s -> %s FAILED: %v", p.sym, p.prog, err)
-			} else { probeStatus[p.sym] = "ok"; log.Printf("attach uretprobe %s -> %s OK", p.sym, p.prog) }
-		} else {
-			if _, err := exe.Uprobe(p.sym, prog, nil); err != nil {
-				probeStatus[p.sym] = "error"
-				probeErrors[p.sym] = err.Error()
-				log.Printf("attach uprobe %s -> %s FAILED: %v", p.sym, p.prog, err)
-			} else { probeStatus[p.sym] = "ok"; log.Printf("attach uprobe %s -> %s OK", p.sym, p.prog) }
+	probeStatus := make(map[string]string) // overall (any success => ok)
+	probeErrors := make(map[string]string) // first error encountered
+	probeStatusPaths := make(map[string]map[string]string)
+	var heldLinks []link.Link
+	for _, path := range unique {
+		perPath := make(map[string]string)
+		exe, err := link.OpenExecutable(path)
+		if err != nil {
+			log.Printf("open executable %s failed: %v", path, err)
+			for _, p := range probes { if _, ok := perPath[p.sym]; !ok { perPath[p.sym] = "open_error" } }
+			probeStatusPaths[path] = perPath
+			continue
 		}
+		for _, p := range probes {
+			prog := coll.Programs[p.prog]
+			if prog == nil { perPath[p.sym] = "missing_prog"; if _,ok:=probeStatus[p.sym]; !ok { probeStatus[p.sym]="missing" }; continue }
+			var lnk link.Link; var aerr error
+			if p.ret { lnk, aerr = exe.Uretprobe(p.sym, prog, nil) } else { lnk, aerr = exe.Uprobe(p.sym, prog, nil) }
+			if aerr != nil {
+				perPath[p.sym] = "error"
+				if _, ok := probeErrors[p.sym]; !ok { probeErrors[p.sym] = aerr.Error() }
+				if _, ok := probeStatus[p.sym]; !ok { probeStatus[p.sym] = "error" }
+				log.Printf("attach %s %s (%s) FAILED on %s: %v", func(b bool) string { if b { return "uretprobe" }; return "uprobe" }(p.ret), p.sym, p.prog, path, aerr)
+			} else {
+				perPath[p.sym] = "ok"
+				heldLinks = append(heldLinks, lnk)
+				if probeStatus[p.sym] != "ok" { probeStatus[p.sym] = "ok" }
+				log.Printf("attach %s %s (%s) OK on %s", func(b bool) string { if b { return "uretprobe" }; return "uprobe" }(p.ret), p.sym, p.prog, path)
+			}
+		}
+		probeStatusPaths[path] = perPath
 	}
-	// Record unused negotiated-group probes explicitly if not already in map
+	// ensure negotiated-group probes appear in overall map
 	for _, sym := range []string{"SSL_get_negotiated_group","SSL_get_shared_group","tls1_shared_group","tls1_get_shared_group"} {
 		if _, ok := probeStatus[sym]; !ok { probeStatus[sym] = "missing" }
 	}
-	// Build and log probe matrix line
+	// Log consolidated matrix
 	var keys []string; for k := range probeStatus { keys = append(keys, k) }
 	sort.Strings(keys)
 	var bldr []string
 	for _, k := range keys { bldr = append(bldr, fmt.Sprintf("%s=%s", k, probeStatus[k])) }
-	log.Printf("probe matrix: %s", strings.Join(bldr, ","))
+	log.Printf("probe matrix (overall): %s", strings.Join(bldr, ","))
+	// Log per-path summary
+	for path, m := range probeStatusPaths {
+		var ks []string; for k := range m { ks = append(ks, k) }
+		sort.Strings(ks)
+		var line []string
+		for _, k := range ks { line = append(line, fmt.Sprintf("%s=%s", k, m[k])) }
+		log.Printf("probe matrix [%s]: %s", path, strings.Join(line, ","))
+	}
 
 	rd, err := ringbuf.NewReader(events); if err != nil { log.Fatalf("ringbuf: %v", err) }
 	defer rd.Close()
@@ -226,7 +274,7 @@ func main() {
 	key := func(tid uint32) uint64 { return uint64(tid) }
 	cache := map[uint64]*partial{}
 	var mu sync.Mutex
-	metricsData := &metrics{ProbeStatus: probeStatus, ProbeErrors: probeErrors}
+	metricsData := &metrics{ProbeStatus: probeStatus, ProbeErrors: probeErrors, ProbeStatusPaths: probeStatusPaths}
 	// Populate build/environment metadata (non-fatal best-effort)
 	metricsData.BuildGitSHA = os.Getenv("GITHUB_SHA")
 	if metricsData.BuildGitSHA == "" { metricsData.BuildGitSHA = os.Getenv("COMMIT_SHA") }
