@@ -108,6 +108,8 @@ func main() {
 	if events == nil { log.Fatalf("events ringbuf not found") }
 	counters := coll.Maps["counters"] // may be nil if older BPF object; tolerate
 
+	exe, err := link.OpenExecutable(libssl)
+	if err != nil { log.Fatalf("open executable: %v", err) }
 	type probe struct{ sym string; ret bool; prog string }
 	probes := []probe{
 		{"SSL_do_handshake", false, "SSL_do_handshake_enter"},
@@ -124,9 +126,9 @@ func main() {
 		prog := coll.Programs[p.prog]
 		if prog == nil { continue }
 		if p.ret {
-			if _, err := link.AttachUretprobe(link.UretprobeOptions{Program: prog, BinaryPath: libssl, Symbol: p.sym}); err != nil { continue }
+			if _, err := exe.Uretprobe(p.sym, prog, nil); err != nil { continue }
 		} else {
-			if _, err := link.AttachUprobe(link.UprobeOptions{Program: prog, BinaryPath: libssl, Symbol: p.sym}); err != nil { continue }
+			if _, err := exe.Uprobe(p.sym, prog, nil); err != nil { continue }
 		}
 	}
 
