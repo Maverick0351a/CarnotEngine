@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<!-- CarnotEngine site | minor edit to trigger Cloudflare Pages deployment -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CarnotEngine – Cryptographic Observability & Attestation</title>
+  <meta name="description" content="CarnotEngine: runtime cryptography visibility, PQC migration readiness, attestation APIs." />
+  <style>
+    :root { --bg:#0d1117; --fg:#e6edf3; --acc:#6ea8fe; --card:#161b22; --warn:#f0ad4e; --ok:#3fb950; font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif; }
+    body { background:var(--bg); color:var(--fg); margin:0; line-height:1.5; }
+    header { padding:2.5rem 1.5rem 1rem; text-align:center; }
+    h1 { margin:0 0 .75rem; font-size:2.2rem; }
+    nav a { color:var(--acc); margin:0 .75rem; text-decoration:none; font-weight:500; }
+    nav a:hover { text-decoration:underline; }
+    main { max-width:960px; margin:0 auto; padding:0 1.5rem 4rem; }
+    .grid { display:grid; gap:1.25rem; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); margin:2rem 0; }
+    .card { background:var(--card); padding:1rem 1.1rem 1.25rem; border:1px solid #30363d; border-radius:8px; }
+    .card h3 { margin-top:0; font-size:1.05rem; }
+    code { background:#1e2530; padding:.15rem .4rem; border-radius:4px; font-size:.85rem; }
+    pre { background:#1e2530; padding:1rem; border-radius:8px; overflow:auto; }
+    footer { text-align:center; padding:2rem 1rem; font-size:.8rem; opacity:.7; }
+    a.button { display:inline-block; background:var(--acc); color:#041526; padding:.7rem 1rem; border-radius:6px; font-weight:600; text-decoration:none; margin:.4rem .3rem; }
+    a.button.alt { background:var(--card); color:var(--acc); border:1px solid var(--acc); }
+    .badges span { display:inline-block; background:#1e2530; padding:.35rem .6rem; margin:.2rem .3rem; border-radius:4px; font-size:.7rem; letter-spacing:.5px; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>CarnotEngine</h1>
+  <p>Runtime cryptographic inventory → Policy → Attestation → Continuous PQC migration readiness.</p>
+  <nav>
+    <a href="https://github.com/Maverick0351a/CarnotEngine">GitHub</a>
+    <a href="../docs/samples/sample_attestation.md">Sample Attestation</a>
+    <a href="../docs/samples/pcap_walkthrough.html">PCAP Walkthrough</a>
+  </nav>
+  <div class="badges">
+    <span>eBPF</span><span>OPA</span><span>PQC</span><span>FastAPI</span><span>Cloud Run</span>
+  </div>
+  <p>
+    <a class="button" href="../docs/samples/sample_attestation.json">Download JSON Attestation</a>
+    <a class="button alt" href="../docs/samples/sample_attestation.md">View Markdown</a>
+  </p>
+</header>
+<main>
+  <section>
+    <h2>Pipeline</h2>
+    <div class="grid">
+      <div class="card"><h3>1. Runtime Capture</h3><p>eBPF hooks collect TLS handshake metadata (SNI, groups, negotiated group, success) with minimal overhead.</p></div>
+      <div class="card"><h3>2. CryptoBOM</h3><p>JSONL → CryptoBOM v2.1 observations hashed with <code>bom_ref</code> for deduplication and temporal diffing.</p></div>
+      <div class="card"><h3>3. Policy Gate</h3><p>OPA evaluates PQC migration & crypto hygiene (RSA key size, legacy hashes, hybrid readiness, tagging).</p></div>
+      <div class="card"><h3>4. Attestation & API</h3><p>FastAPI service signs (roadmap) aggregated risk posture and emits human + machine readable artifacts.</p></div>
+    </div>
+  </section>
+  <section>
+    <h2>Quick Start</h2>
+    <pre><code># build eBPF + loader
+cd carnot-agent/ebpf-core
+make && cd go-loader && go build -o bin/carnot-ebpf-loader ./...
+./bin/carnot-ebpf-loader -obj ../openssl_handshake.bpf.o -out runtime.jsonl -libssl /lib/x86_64-linux-gnu/libssl.so.3
+
+# convert to CryptoBOM
+python integrations/runtime/ebpf_to_bom.py --in runtime.jsonl --out runtime.bom.json --asset-id host:demo
+
+# run policy gate (opa)
+opa eval --format pretty -i runtime.bom.json -d policies 'data'
+
+# attestation (future combined input)
+uvicorn api.main:app --reload</code></pre>
+  </section>
+  <section>
+    <h2>Roadmap Highlights</h2>
+    <ul>
+      <li>Signed attestations (Sigstore / keyless).</li>
+      <li>Hybrid KEM group mapping coverage.</li>
+      <li>UI diffing of sequential runtime captures.</li>
+      <li>Cloud asset ingestion expansion (GCP/Azure).</li>
+    </ul>
+  </section>
+</main>
+<footer>
+  <p>Apache-2.0 Licensed. © 2025 CarnotEngine Project.</p>
+</footer>
+</body>
+</html>

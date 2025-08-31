@@ -35,3 +35,9 @@
 	- Added FastAPI service (api/main.py) with POST /attest producing JSON + markdown attestation.
 	- Dockerfile & requirements.txt created; deploy script scripts/deploy_cloud_run.sh for gcloud run deploy.
 	- Attestation includes HNDL exposure approximation and policy status.
+- Task 06 (Site Deploy & Samples):
+	- Added static site scaffold at `carnot-site/index.html` (pipeline overview, quick start, roadmap).
+	- Published sample attestation artifacts (`docs/samples/sample_attestation.json`, `.md`).
+	- Added PCAP walkthrough (`docs/samples/pcap_walkthrough.html`).
+	- Added GitHub Actions workflow `.github/workflows/site.yml` to deploy to Cloudflare Pages (project: carnotengine-site).
+	- Pending: Set `CLOUDFLARE_ACCOUNT_ID` & `CLOUDFLARE_API_TOKEN` secrets; first push will publish.
