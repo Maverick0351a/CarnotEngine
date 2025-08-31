@@ -12,7 +12,7 @@ MODE="normal" # or small
 DURATION="20s"
 CONCURRENCY=100
 LOADER_EXTRA_ARGS="${LOADER_EXTRA_ARGS:-}"
-LOADGEN="curl"  # curl (default, uses OpenSSL), hey (Go TLS, no uprobes), openssl (public endpoint), or openssl_local (local s_server)
+LOADGEN="curl"  # Generators: hey (preferred), curl, openssl (public), openssl_local (local s_server)
 TARGET_URL="https://example.org"
 
 usage(){ cat <<EOF
@@ -47,6 +47,14 @@ else
   command -v curl >/dev/null || { echo "curl required"; exit 1; }
 fi
 command -v jq >/dev/null || { echo "jq required"; exit 1; }
+
+# If curl mode requested but curl not linked with OpenSSL, auto-fallback to openssl generator.
+if [ "$LOADGEN" = "curl" ]; then
+  if ! curl -V 2>/dev/null | grep -qi openssl; then
+    echo "[!] curl not linked against OpenSSL (no uprobes). Auto-falling back to openssl generator." >&2
+    LOADGEN="openssl"
+  fi
+fi
 
 # Resolve libssl path based on selected generator (curl or openssl).
 resolve_libssl() {
@@ -96,45 +104,23 @@ else
 fi
 
 echo "[*] Generating HTTPS traffic"
-gen_with_curl() {
-  local total_s=${DURATION%s}
-  [ "$total_s" -lt 1 ] && total_s=1
-  local end=$(( $(date +%s) + total_s ))
-  local iter=0
-  while [ $(date +%s) -lt $end ]; do
-    iter=$((iter+1))
-    if (( iter % 5 == 0 )); then echo "[*] curl loop iteration $iter"; fi
-    # fire a burst of concurrency background curls
-    for i in $(seq 1 $CONCURRENCY); do
-  curl -sS --max-time 8 --http1.1 --no-keepalive -H 'Connection: close' "$TARGET_URL" -o /dev/null &
-    done
-    wait
-  done
-}
 
-gen_with_curl_small() {
-  local total_s=${DURATION%s}; [ "$total_s" -lt 8 ] && total_s=8
-  local bursts=6
-  local per=$(( total_s / bursts )); [ "$per" -lt 1 ] && per=1
-  echo "[*] Small mode curl bursts: TOTAL=${total_s}s BURSTS=${bursts} PER=${per}s concurrency=$(( CONCURRENCY * 3 ))"
-  for b in $(seq 1 $bursts); do
-    for i in $(seq 1 $(( CONCURRENCY * 3 )) ); do
-  curl -sS --max-time 8 --http1.1 --no-keepalive -H 'Connection: close' "$TARGET_URL" -o /dev/null &
-    done
-    wait
-    sleep $per
-  done
-}
+# Helper: extract host from URL
+extract_host() { echo "$1" | sed -E 's#https?://([^/:]+).*#\1#'; }
+HOSTNAME=$(extract_host "$TARGET_URL")
+TOTAL_SECONDS=${DURATION%s}; [ "$TOTAL_SECONDS" -lt 1 ] && TOTAL_SECONDS=1
+# Compute a nominal operation count for xargs-based generators (aim ~ duration)
+OPS=$(( TOTAL_SECONDS * CONCURRENCY ))
 
 if [ "$LOADGEN" = "hey" ]; then
   if [ "$MODE" = "small" ]; then
     TOTAL=${DURATION%s}; [ "$TOTAL" -lt 8 ] && TOTAL=8; BURSTS=6; PER=$(( TOTAL / BURSTS )); [ "$PER" -lt 1 ] && PER=1
     echo "[*] Small mode (hey): TOTAL=${TOTAL}s BURSTS=${BURSTS} PER=${PER}s concurrency=$(( CONCURRENCY * 3 ))"
     for i in $(seq 1 $BURSTS); do
-      hey -z "${PER}s" -c $(( CONCURRENCY * 3 )) -disable-keepalive "$TARGET_URL" || true
+      hey -z "${PER}s" -c $(( CONCURRENCY * 3 )) -disable-keepalive --http2=false "$TARGET_URL" || true
     done
   else
-    hey -z "$DURATION" -c "$CONCURRENCY" -disable-keepalive "$TARGET_URL" || true
+    hey -z "$DURATION" -c "$CONCURRENCY" -disable-keepalive --http2=false "$TARGET_URL" || true
   fi
 elif [ "$LOADGEN" = "openssl_local" ]; then
   # Local OpenSSL server & client hammer (no egress; deterministic)
@@ -160,12 +146,14 @@ elif [ "$LOADGEN" = "openssl_local" ]; then
   # Give the server a moment to finish any final handshakes
   sleep 1
   kill $SERVER_PID 2>/dev/null || true
+elif [ "$LOADGEN" = "curl" ]; then
+  echo "[*] curl generator using xargs (OPS=$OPS concurrency=$CONCURRENCY)"
+  seq 1 $OPS | xargs -P "$CONCURRENCY" -I{} bash -c 'timeout 2s curl --http1.1 -sS -m 2 -o /dev/null -H "Connection: close" "$TARGET_URL"' || true
+elif [ "$LOADGEN" = "openssl" ]; then
+  echo "[*] openssl s_client generator (OPS=$OPS concurrency=$CONCURRENCY host=$HOSTNAME)"
+  seq 1 $OPS | xargs -P "$CONCURRENCY" -I{} bash -c 'timeout 2s openssl s_client -connect "'$HOSTNAME':443" -servername "$HOSTNAME" </dev/null >/dev/null 2>&1 || true' || true
 else
-  if [ "$MODE" = "small" ]; then
-    gen_with_curl_small
-  else
-    gen_with_curl
-  fi
+  echo "[!] Unknown LOADGEN '$LOADGEN'" >&2; exit 1
 fi
 if [ "$MODE" = "small" ]; then
   # Allow extra time for periodic metrics flush (5s interval) after bursts
