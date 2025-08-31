@@ -8,16 +8,15 @@ OBJ_DIR="carnot-agent/ebpf-core"
 LOADER_DIR="carnot-agent/ebpf-core/go-loader"
 OUT_JSON="integrations/runtime/runtime.jsonl"
 METRICS_JSON="integrations/runtime/metrics.json"
-LIBSSL_PATH="/lib/x86_64-linux-gnu/libssl.so.3" # default guess
 MODE="normal" # or small
 DURATION="20s"
 CONCURRENCY=100
 LOADER_EXTRA_ARGS="${LOADER_EXTRA_ARGS:-}"
-LOADGEN="curl"  # curl (default, uses OpenSSL on ubuntu) or hey (Go TLS -> will NOT trigger libssl uprobes)
+LOADGEN="curl"  # curl (default, uses OpenSSL), hey (Go TLS, no uprobes), or openssl (uses s_client loop)
 TARGET_URL="https://example.org"
 
 usage(){ cat <<EOF
-Usage: $0 [-m normal|small] [-d duration] [-c concurrency] [-g curl|hey] [-u url]
+Usage: $0 [-m normal|small] [-d duration] [-c concurrency] [-g curl|hey|openssl] [-u url]
   -m  Ring buffer mode: normal (512KiB) or small (32KiB w/ expected drops)
   -d  Load generation duration (default 20s)
   -c  Concurrency for hey (default 100)
@@ -42,34 +41,27 @@ command -v bpftool >/dev/null || { echo "bpftool required"; exit 1; }
 command -v go >/dev/null || { echo "go toolchain required"; exit 1; }
 if [ "$LOADGEN" = "hey" ]; then
   command -v hey >/dev/null || { echo "hey required (go install github.com/rakyll/hey@latest)"; exit 1; }
+elif [ "$LOADGEN" = "openssl" ]; then
+  command -v openssl >/dev/null || { echo "openssl required"; exit 1; }
 else
   command -v curl >/dev/null || { echo "curl required"; exit 1; }
 fi
 command -v jq >/dev/null || { echo "jq required"; exit 1; }
 
-# Auto-detect libssl if default missing
-detect_libssl() {
-  local c
-  if command -v curl >/dev/null; then
-    c=$(ldd "$(command -v curl)" 2>/dev/null | awk '/libssl.so/{print $3; exit}')
-    [ -n "$c" ] && [ -r "$c" ] && echo "$c" && return 0
-  fi
-  if command -v openssl >/dev/null; then
-    c=$(ldd "$(command -v openssl)" 2>/dev/null | awk '/libssl.so/{print $3; exit}')
-    [ -n "$c" ] && [ -r "$c" ] && echo "$c" && return 0
-  fi
-  for c in /usr/lib/*/libssl.so.* /lib/*/libssl.so.*; do [ -r "$c" ] && echo "$c" && return 0; done
-  return 1
+# Resolve libssl path based on selected generator (curl or openssl).
+resolve_libssl() {
+  local bin="$1"
+  local p
+  p="$(ldd "$(command -v "$bin")" 2>/dev/null | awk '/libssl\.so\.3/ {print $3}' | head -1)"
+  [ -z "$p" ] && [ -e /usr/lib/x86_64-linux-gnu/libssl.so.3 ] && p="$(readlink -f /usr/lib/x86_64-linux-gnu/libssl.so.3)"
+  [ -z "$p" ] && [ -e /lib/x86_64-linux-gnu/libssl.so.3 ] && p="$(readlink -f /lib/x86_64-linux-gnu/libssl.so.3)"
+  [ -z "$p" ] && { echo "[!] Could not resolve libssl.so.3 for $bin"; return 1; }
+  echo "$p"
 }
-if [ ! -r "$LIBSSL_PATH" ]; then
-  echo "[!] Default libssl not found, attempting detection" >&2
-  newp=$(detect_libssl || true)
-  if [ -n "$newp" ]; then LIBSSL_PATH="$newp"; echo "[+] Detected libssl: $LIBSSL_PATH"; fi
-fi
-if [ ! -r "$LIBSSL_PATH" ]; then
-  echo "[!] Could not read libssl; continuing but probes will fail" >&2
-fi
-echo "[*] Using libssl path: $LIBSSL_PATH"
+GEN_BIN="curl"
+if [ "$LOADGEN" = "openssl" ]; then GEN_BIN="openssl"; fi
+LIBSSL_PATH="$(resolve_libssl "$GEN_BIN")" || { echo "[!] Failed to resolve libssl; aborting"; exit 1; }
+echo "[*] Resolved libssl: $LIBSSL_PATH"
 
 pushd "$OBJ_DIR" >/dev/null
 make clean || true
