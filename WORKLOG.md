@@ -54,3 +54,7 @@
 	- Integrated into `scripts/run_assessment.sh` (step 7) generating `hndl_sankey.png` and `hndl_sankey_violations.png` when OPA results present.
 	- OPA step now emits machine-readable `opa_result.json` for visualization.
 	- PNG artifacts included in assessment bundle zip.
+- Task 09 (Assessment One-Pager & Outreach):
+	- Added `docs/ASSESSMENT_TEMPLATE.md` with logo/contact placeholders and structured sections (executive summary, findings, roadmap).
+	- Added `docs/EMAIL_OUTREACH.md` including target list table (10 slots), initial + follow-up email templates, and metrics tracking.
+	- Next: generate branded PDF to `docs/sales/` and record outreach metrics after sending.
