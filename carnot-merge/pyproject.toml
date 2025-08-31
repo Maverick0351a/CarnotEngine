@@ -1,7 +1,13 @@
 [project]
 name='carnot-merge'
 version='0.0.1'
-packages=['carnot_merge']
 
 [project.scripts]
 carnot-merge='carnot_merge.__main__:main'
+
+[build-system]
+requires=['setuptools>=61']
+build-backend='setuptools.build_meta'
+
+[tool.setuptools.packages.find]
+include=['carnot_merge']
