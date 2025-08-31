@@ -147,8 +147,14 @@ elif [ "$LOADGEN" = "openssl_local" ]; then
   sleep 1
   kill $SERVER_PID 2>/dev/null || true
 elif [ "$LOADGEN" = "curl" ]; then
-  echo "[*] curl generator using xargs (OPS=$OPS concurrency=$CONCURRENCY)"
-  seq 1 $OPS | xargs -P "$CONCURRENCY" -I{} bash -c 'timeout 2s curl --http1.1 -sS -m 2 -o /dev/null -H "Connection: close" "$TARGET_URL"' || true
+  OPS=$(( CONCURRENCY * 10 ))
+  echo "[*] curl generator using xargs (OPS=${OPS} concurrency=${CONCURRENCY})"
+  seq 1 "$OPS" | xargs -P "$CONCURRENCY" -I{} bash -c '
+    set -e
+    url="$1"
+    # Force new handshake: HTTP/1.1 + no keepalive + short timeout
+    curl --http1.1 -sS -m 3 -o /dev/null -H "Connection: close" "$url" || true
+  ' _ "$TARGET_URL" || true
 elif [ "$LOADGEN" = "openssl" ]; then
   echo "[*] openssl s_client generator (OPS=$OPS concurrency=$CONCURRENCY host=$HOSTNAME)"
   seq 1 $OPS | xargs -P "$CONCURRENCY" -I{} bash -c 'timeout 2s openssl s_client -connect "'$HOSTNAME':443" -servername "$HOSTNAME" </dev/null >/dev/null 2>&1 || true' || true
