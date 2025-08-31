@@ -23,10 +23,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang llvm make git jq libbpf-dev linux-headers-$(uname -r) build-essential libelf-dev zlib1g-dev
           if ! sudo apt-get install -y bpftool; then
-            echo "bpftool pkg fallback build";
-            git clone --depth 1 https://github.com/libbpf/bpftool.git /tmp/bpftool-src
-            make -C /tmp/bpftool-src/src
+            echo "bpftool pkg fallback build (pin v7.2)";
+            git clone --depth 1 --branch v7.2 https://github.com/libbpf/bpftool.git /tmp/bpftool-src
+            git -C /tmp/bpftool-src submodule update --init --recursive || true
+            make -C /tmp/bpftool-src/src V=1
             sudo cp /tmp/bpftool-src/src/bpftool /usr/local/bin/
+            bpftool version || true
           fi
           sudo apt-get install -y golang-go
           go install github.com/rakyll/hey@latest

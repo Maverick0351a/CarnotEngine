@@ -35,12 +35,13 @@ jobs:
           sudo add-apt-repository universe -y
           sudo apt-get update
           if ! sudo apt-get install -y bpftool; then
-            echo "bpftool package unavailable, building from source...";
+            echo "bpftool package unavailable, building from source (pin v7.2)...";
             sudo apt-get install -y git build-essential libelf-dev zlib1g-dev clang llvm make pkg-config
-            git clone --depth 1 https://github.com/libbpf/bpftool.git /tmp/bpftool-src
+            git clone --depth 1 --branch v7.2 https://github.com/libbpf/bpftool.git /tmp/bpftool-src
             git -C /tmp/bpftool-src submodule update --init --recursive || true
-            make -C /tmp/bpftool-src/src
+            make -C /tmp/bpftool-src/src V=1
             sudo cp /tmp/bpftool-src/src/bpftool /usr/local/bin/
+            bpftool version || true
           fi
           sudo apt-get install -y clang llvm make golang-go jq libbpf-dev linux-headers-$(uname -r)
           go install github.com/rakyll/hey@latest
