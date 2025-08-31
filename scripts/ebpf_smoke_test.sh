@@ -100,7 +100,10 @@ gen_with_curl() {
   local total_s=${DURATION%s}
   [ "$total_s" -lt 1 ] && total_s=1
   local end=$(( $(date +%s) + total_s ))
+  local iter=0
   while [ $(date +%s) -lt $end ]; do
+    iter=$((iter+1))
+    if (( iter % 5 == 0 )); then echo "[*] curl loop iteration $iter"; fi
     # fire a burst of concurrency background curls
     for i in $(seq 1 $CONCURRENCY); do
       curl -sS --max-time 8 --http1.1 "$TARGET_URL" -o /dev/null &
