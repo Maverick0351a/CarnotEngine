@@ -93,7 +93,15 @@ sudo "$LOADER_DIR"/bin/carnot-ebpf-loader \
   -libssl "$LIBSSL_PATH" $LOADER_EXTRA_ARGS 2>loader_stderr.log &
 LOADER_PID=$!
 echo "[*] Loader PID $LOADER_PID"
-sleep 1
+sleep 2
+
+# Surface early attach results before traffic so job logs show probe matrix / errors quickly.
+if [ -s loader_stderr.log ]; then
+  echo "[*] Initial loader log (first 50 lines):"
+  head -n 50 loader_stderr.log | sed 's/^/[loader] /'
+else
+  echo "[*] Waiting for loader to emit first metrics/log line (flush interval 5s)"
+fi
 
 echo "[*] Generating HTTPS traffic"
 gen_with_curl() {

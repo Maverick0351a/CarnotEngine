@@ -78,6 +78,7 @@ type metrics struct {
 	P95DurationMs       float64 `json:"p95DurationMs"`
 	P99DurationMs       float64 `json:"p99DurationMs"`
 	ProbeStatus         map[string]string `json:"probe_status"`
+	ProbeErrors         map[string]string `json:"probe_errors,omitempty"`
 	BuildGitSHA         string  `json:"build_git_sha,omitempty"`
 	BpfToolVersion      string  `json:"bpftool_version,omitempty"`
 	GoVersion           string  `json:"go_version,omitempty"`
@@ -178,17 +179,22 @@ func main() {
 		{"tls1_get_shared_group", true, "tls1_get_shared_group_exit"},
 	}
 	probeStatus := make(map[string]string)
+	probeErrors := make(map[string]string)
 	for _, p := range probes {
 		prog := coll.Programs[p.prog]
 		if prog == nil { probeStatus[p.sym] = "missing"; continue }
 		if p.ret {
 			if _, err := exe.Uretprobe(p.sym, prog, nil); err != nil {
 				probeStatus[p.sym] = "error"
-			} else { probeStatus[p.sym] = "ok" }
+				probeErrors[p.sym] = err.Error()
+				log.Printf("attach uretprobe %s -> %s FAILED: %v", p.sym, p.prog, err)
+			} else { probeStatus[p.sym] = "ok"; log.Printf("attach uretprobe %s -> %s OK", p.sym, p.prog) }
 		} else {
 			if _, err := exe.Uprobe(p.sym, prog, nil); err != nil {
 				probeStatus[p.sym] = "error"
-			} else { probeStatus[p.sym] = "ok" }
+				probeErrors[p.sym] = err.Error()
+				log.Printf("attach uprobe %s -> %s FAILED: %v", p.sym, p.prog, err)
+			} else { probeStatus[p.sym] = "ok"; log.Printf("attach uprobe %s -> %s OK", p.sym, p.prog) }
 		}
 	}
 	// Record unused negotiated-group probes explicitly if not already in map
@@ -212,7 +218,7 @@ func main() {
 	key := func(tid uint32) uint64 { return uint64(tid) }
 	cache := map[uint64]*partial{}
 	var mu sync.Mutex
-	metricsData := &metrics{ProbeStatus: probeStatus}
+	metricsData := &metrics{ProbeStatus: probeStatus, ProbeErrors: probeErrors}
 	// Populate build/environment metadata (non-fatal best-effort)
 	metricsData.BuildGitSHA = os.Getenv("GITHUB_SHA")
 	if metricsData.BuildGitSHA == "" { metricsData.BuildGitSHA = os.Getenv("COMMIT_SHA") }
