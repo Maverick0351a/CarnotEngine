@@ -15,16 +15,8 @@ static int call_shared_group(void* fn, void* ssl, int idx) {
 }
 */
 import "C"
-import (
-	"fmt"
-	"unsafe"
-)
+import ()
 
 // (Simplified) attempt to resolve negotiated group via libssl exported symbol.
 // This is illustrative; real implementation would search multiple symbols.
-func Lookup(libssl, sslptr string) (string, bool) {
-	// No runtime resolution implemented yet; return false to fall back to BPF events if any.
-	return "", false
-	_ = fmt.Sprintf // keep fmt imported if expanded later
-	_ = unsafe.Pointer
-}
+func Lookup(libssl, sslptr string) (string, bool) { return "", false }
