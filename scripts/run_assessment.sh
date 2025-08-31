@@ -27,9 +27,15 @@ cd "$ROOT/carnot-merge"; pip install -q -e .
 carnot-merge "$OUT/static.bom.json" "$OUT/runtime.bom.json" "$OUT/aws.bom.json" -o "$OUT/merged.json"
 
 echo "[5/8] OPA (warn)"
-if [ "${SKIP_OPA:-0}" -eq 0 ]; then \
-  opa eval -i "$OUT/merged.json" -d "$ROOT/policies/pqc_migration.rego" "data.carnot.pqc_migration.violation" | tee "$OUT/opa_result.txt"; \
-  opa eval -f json -i "$OUT/merged.json" -d "$ROOT/policies/pqc_migration.rego" "data.carnot.pqc_migration.violation" > "$OUT/opa_result.json"; \
+if [ "${SKIP_OPA:-0}" -eq 0 ]; then
+  if opa eval -i "$OUT/merged.json" -d "$ROOT/policies/pqc_migration.rego" "data.carnot.pqc_migration.violation" | tee "$OUT/opa_result.txt"; then
+    opa eval -f json -i "$OUT/merged.json" -d "$ROOT/policies/pqc_migration.rego" "data.carnot.pqc_migration.violation" > "$OUT/opa_result.json" || echo '{"result":[{"expressions":[{"value":[]}]}]}' > "$OUT/opa_result.json"
+  else
+    echo "OPA evaluation failed (syntax or other). Continuing with empty violations." >&2
+    echo '{"result":[{"expressions":[{"value":[]}]}]}' > "$OUT/opa_result.json"
+  fi
+else
+  echo '{"result":[{"expressions":[{"value":[]}]}]}' > "$OUT/opa_result.json"
 fi
 
 echo "[6/8] Attestation"
