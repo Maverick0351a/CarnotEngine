@@ -1,0 +1,75 @@
+name: eBPF Smoke Test
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang llvm make jq curl openssl binutils build-essential pkg-config libelf-dev libbpf-dev bpftool
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+
+      - name: Version Summary
+        run: |
+          clang --version || true
+          bpftool version || true
+          go version
+          uname -a
+
+      - name: Run smoke (openssl_local)
+        env:
+          LOADER_EXTRA_ARGS: "-rb 1048576"
+        run: |
+          bash scripts/ebpf_smoke_test.sh -m normal -d 8s -c 40 -g openssl_local
+          mkdir -p artifacts
+          cp integrations/runtime/metrics.json artifacts/metrics_openssl_local.json || true
+          cp integrations/runtime/runtime.jsonl artifacts/runtime_openssl_local.jsonl || true
+          cp carnot-agent/ebpf-core/go-loader/loader_stderr.log artifacts/loader_openssl_local.log || true
+
+      - name: Run smoke (curl)
+        env:
+          LOADER_EXTRA_ARGS: "-rb 1048576"
+        run: |
+          bash scripts/ebpf_smoke_test.sh -m normal -d 8s -c 40 -g curl
+          mkdir -p artifacts
+          cp integrations/runtime/metrics.json artifacts/metrics_curl.json || true
+          cp integrations/runtime/runtime.jsonl artifacts/runtime_curl.jsonl || true
+          cp carnot-agent/ebpf-core/go-loader/loader_stderr.log artifacts/loader_curl.log || true
+
+      - name: Basic acceptance checks
+        run: |
+          set -e
+          for f in artifacts/metrics_*.json; do
+            echo "Checking $f";
+            EV=$(jq -r '.eventsReceived // 0' "$f")
+            HE=$(jq -r '.handshakesEmitted // 0' "$f")
+            RATE=$(jq -r '.kernel_drop_rate // 0' "$f")
+            echo "eventsReceived=$EV handshakesEmitted=$HE kernel_drop_rate=$RATE"
+            test "$EV" -gt 0 || (echo "No eventsReceived"; exit 1)
+            test "$HE" -gt 0 || (echo "No handshakesEmitted"; exit 1)
+            awk -v r="$RATE" 'BEGIN{ if (r>0.005) { exit 1 } }' || (echo "Kernel drop rate too high: $RATE"; exit 1)
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ebpf-smoke-artifacts
+          path: artifacts
+          retention-days: 7
