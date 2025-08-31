@@ -1,0 +1,64 @@
+name: Stress & Overhead (Linux)
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: Seconds to run stress test
+        required: false
+        default: '30'
+      target:
+        description: HTTP target URL
+        required: false
+        default: 'https://example.org'
+  push:
+    paths:
+      - 'scripts/stress_test.sh'
+      - 'carnot-agent/ebpf-core/**'
+      - '.github/workflows/stress.yml'
+
+jobs:
+  stress:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm make golang-go jq
+          go install github.com/rakyll/hey@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+      - name: Build eBPF & loader
+        run: |
+          cd carnot-agent/ebpf-core
+          make
+          cd go-loader
+          go build -o bin/carnot-ebpf-loader ./...
+      - name: Run stress test
+        run: |
+          DURATION=${{ github.event.inputs.duration || '30' }}
+          TARGET=${{ github.event.inputs.target || 'https://example.org' }}
+          bash scripts/stress_test.sh "$TARGET" "$DURATION" metrics.json
+      - name: Show metrics.json
+        run: cat metrics.json
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: stress-metrics
+          path: |
+            metrics.json
+            docs/OVERHEAD_RESULTS.md
+            runtime.jsonl
+            loader_metrics.json
+            loader_stress.log
+      - name: Append summary
+        run: |
+          echo '### Stress Test Metrics' >> $GITHUB_STEP_SUMMARY
+          echo '\n```json' >> $GITHUB_STEP_SUMMARY
+          cat metrics.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

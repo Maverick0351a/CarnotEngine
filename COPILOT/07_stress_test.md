@@ -10,4 +10,5 @@ Progress:
 - [x] Collects p95/p99 HTTP latency, throughput, handshake p95/p99 (from loader), correlation failure & kernel drop rates.
 - [x] Writes structured `metrics.json` and `docs/OVERHEAD_RESULTS.md` summary.
 - [x] Windows placeholder run produced metrics (no loader) -> commit.
-- [ ] Linux run with loader to capture handshake percentiles & drops.
+- [x] Added GitHub Actions workflow `stress.yml` for automated Linux run & artifact upload.
+- [ ] Linux run with loader to capture handshake percentiles & drops (trigger workflow_dispatch + update results).
