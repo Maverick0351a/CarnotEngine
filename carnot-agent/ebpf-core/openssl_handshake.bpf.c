@@ -7,8 +7,6 @@
 #define TASK_COMM_LEN 16
 #endif
 enum evt_kind { EVT_HANDSHAKE_RET=1, EVT_SNI_SET=2, EVT_GROUPS_SET=3, EVT_GROUP_SELECTED=4 };
-// Backward-compatible alternate numeric kind for SNI_SET events emitted via SSL_ctrl per new requirement (#define EVT_SNI_SET 3)
-#define EVT_SNI_SET_ALT 3
 // OpenSSL control command constants (subset)
 #define SSL_CTRL_SET_TLSEXT_HOSTNAME 55
 struct event_t {
@@ -85,7 +83,7 @@ SEC("uprobe//libssl.so.3:SSL_ctrl") int BPF_KPROBE(SSL_ctrl_enter){
   if (cmd == SSL_CTRL_SET_TLSEXT_HOSTNAME && parg) {
     struct event_t *e=bpf_ringbuf_reserve(&events,sizeof(*e),0); if(!e){ drop_inc(); return 0; }
     e->ts_ns=bpf_ktime_get_ns(); __u64 pt=bpf_get_current_pid_tgid(); e->pid=pt>>32; e->tid=(__u32)pt; bpf_get_current_comm(&e->comm,sizeof(e->comm));
-  e->kind=EVT_SNI_SET_ALT; e->success=false; e->ssl_ptr=(__u64)ssl_ptr; e->groups[0]='\0'; e->group_id=-1; e->sni[0]='\0';
+  e->kind=EVT_SNI_SET; e->success=false; e->ssl_ptr=(__u64)ssl_ptr; e->groups[0]='\0'; e->group_id=-1; e->sni[0]='\0';
     bpf_probe_read_user_str(e->sni,sizeof(e->sni),parg);
     bpf_ringbuf_submit(e,0); count_inc(0);
   }

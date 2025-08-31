@@ -391,7 +391,7 @@ func main() {
 		p := cache[k]
 		if p == nil { p = &partial{firstSeen: time.Now(), proc: proc}; cache[k] = p }
 		switch kind {
-		case 2,3: // SNI_SET
+		case 2: // SNI_SET
 			if p.sni == "" && p.sniHash == "" { // first one wins
 				clean, h := sanitizeSNI(sniRaw)
 				p.sni = clean
@@ -401,7 +401,7 @@ func main() {
 				}
 			}
 			p.sslptr = fmt.Sprintf("0x%x", evt.SslPtr)
-		case 3: // GROUPS_SET (note: value 3 reused earlier; groups event originally 3; if collision treat via kind value separation in C would be better)
+		case 3: // GROUPS_SET
 			if gr != "" { p.groups = append(p.groups, gr) }
 		case 4: // GROUP_SELECTED
 			if evt.GroupID != 0 { p.groupSelected = groupName(evt.GroupID) }
