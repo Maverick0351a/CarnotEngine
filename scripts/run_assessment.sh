@@ -27,14 +27,17 @@ cd "$ROOT/carnot-merge"; pip install -q -e .
 carnot-merge "$OUT/static.bom.json" "$OUT/runtime.bom.json" "$OUT/aws.bom.json" -o "$OUT/merged.json"
 
 echo "[5/8] OPA (warn)"
-if [ "${SKIP_OPA:-0}" -eq 0 ]; then opa eval -i "$OUT/merged.json" -d "$ROOT/policies/pqc_migration.rego" "data.carnot.pqc_migration.violation" | tee "$OUT/opa_result.txt"; fi
+if [ "${SKIP_OPA:-0}" -eq 0 ]; then \
+  opa eval -i "$OUT/merged.json" -d "$ROOT/policies/pqc_migration.rego" "data.carnot.pqc_migration.violation" | tee "$OUT/opa_result.txt"; \
+  opa eval -f json -i "$OUT/merged.json" -d "$ROOT/policies/pqc_migration.rego" "data.carnot.pqc_migration.violation" > "$OUT/opa_result.json"; \
+fi
 
 echo "[6/8] Attestation"
 cd "$ROOT/carnot-attest"; pip install -q -e .
 carnot-attest --project "Assessment" --bom "$OUT/merged.json" --out "$OUT"
 
 echo "[7/8] Visualization"
-python3 "$ROOT/carnot-attest/report_viz.py" --attestation "$OUT/attestation.json" --out "$OUT/hndl_sankey.png" || true
+python3 "$ROOT/carnot-attest/report_viz.py" --attestation "$OUT/attestation.json" --out "$OUT/hndl_sankey.png" --violations "$OUT/opa_result.json" || true
 
 echo "[8/8] Bundle"
 cd "$OUT"; zip -r "$(basename "$OUT").zip" . >/dev/null; echo "Bundle: $OUT/$(basename "$OUT").zip"

@@ -49,3 +49,8 @@
 	- Windows placeholder run (no eBPF) recorded baseline (p95=~70ms, p99=~563ms @ ~17 rps).
 	- Linux run (GitHub Actions run #14) produced handshake metrics & kernel drop stats (artifact: stress-metrics). Repository docs update in progress.
 - Added GitHub Actions workflow `.github/workflows/stress.yml` to run full Linux stress test (build eBPF + Go loader, run harness, upload metrics artifacts) so we can collect real handshake correlation & kernel drop metrics without needing local Linux host.
+- Task 08 (Attestation Visualization):
+	- Added Sankey diagram + optional violations bar chart generator (`carnot-attest/report_viz.py`).
+	- Integrated into `scripts/run_assessment.sh` (step 7) generating `hndl_sankey.png` and `hndl_sankey_violations.png` when OPA results present.
+	- OPA step now emits machine-readable `opa_result.json` for visualization.
+	- PNG artifacts included in assessment bundle zip.
