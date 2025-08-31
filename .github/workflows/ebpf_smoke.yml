@@ -23,7 +23,7 @@ jobs:
             clang llvm make jq curl openssl binutils build-essential pkg-config libelf-dev libbpf-dev git ca-certificates
           # Build bpftool from source (apt package may be unavailable)
           git clone --recurse-submodules --depth 1 https://github.com/libbpf/bpftool.git /tmp/bpftool
-          cd /tmp/bpftool
+          cd /tmp/bpftool/src
           make
           sudo make install
       - name: Setup Go
