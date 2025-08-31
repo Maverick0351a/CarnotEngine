@@ -11,6 +11,7 @@ import (
 	"crypto/hmac"
 	"encoding/hex"
 	"encoding/base64"
+	"unicode/utf8"
 	"log"
 	"os"
 	"os/exec"
@@ -67,6 +68,7 @@ type partial struct {
 	firstSeen     time.Time
 	proc          string
 	sni           string
+	sniHash       string // may be computed if original invalid or privacy mode
 	groups        []string
 	groupSelected string
 	sslptr        string
@@ -206,6 +208,7 @@ func main() {
 		{"SSL_connect_ex", true,  "SSL_connect_ex_exit"},
 		{"SSL_accept", false, "SSL_accept_enter"},
 		{"SSL_accept", true,  "SSL_accept_exit"},
+		{"SSL_ctrl", false, "SSL_ctrl_enter"},
 		{"SSL_set_tlsext_host_name", false, "SSL_set_tlsext_host_name_enter"},
 		{"SSL_CTX_set1_groups_list", false, "SSL_CTX_set1_groups_list_enter"},
 		{"SSL_get_negotiated_group", true, "SSL_get_negotiated_group_exit"},
@@ -369,7 +372,7 @@ func main() {
 			kind := evt.Kind
 			pid, tid := evt.Pid, evt.Tid
 			proc := string(bytes.Trim(evt.Comm[:], "\x00"))
-			sni := string(bytes.Trim(evt.Sni[:], "\x00"))
+			sniRaw := string(bytes.Trim(evt.Sni[:], "\x00"))
 			gr := string(bytes.Trim(evt.Groups[:], "\x00"))
 			k := key(tid)
 
@@ -377,8 +380,33 @@ func main() {
 			p := cache[k]
 			if p == nil { p = &partial{firstSeen: time.Now(), proc: proc}; cache[k] = p }
 			switch kind {
-			case 2: // SNI_SET
-				p.sni = sni; p.sslptr = fmt.Sprintf("0x%x", evt.SslPtr)
+			case 2,3: // SNI_SET (original and SSL_ctrl alternate)
+				// Sanitize SNI (utf8, printable, trim spaces, enforce length <=253 per RFC 1035/1123-ish)
+				valid := true
+				if !utf8.ValidString(sniRaw) { valid = false }
+				// remove NULs and control chars
+				filtered := make([]rune,0,len(sniRaw))
+				for _, r := range sniRaw {
+					if r == 0 || r < 32 { continue }
+					filtered = append(filtered, r)
+				}
+				clean := strings.TrimSpace(string(filtered))
+				if len(clean) > 253 { clean = clean[:253] }
+				// Basic hostname char validation (allow a-zA-Z0-9.-)
+				for _, r := range clean {
+					if !(r == '-' || r == '.' || (r>='0'&&r<='9') || (r>='a'&&r<='z') || (r>='A'&&r<='Z')) { valid = false; break }
+				}
+				if valid && clean != "" {
+					p.sni = clean
+				} else {
+					p.sni = ""
+					// compute hash of raw for telemetry/privacy if enabled OR always store hash to separate invalid marker
+					p.sniHash = hashBytes([]byte(sniRaw), hashSNIMode)
+					if p.sniHash == "" { // ensure we always have a hash for invalid even if mode=none -> fallback sha256
+						p.sniHash = hashBytes([]byte(sniRaw), "sha256")
+					}
+				}
+				p.sslptr = fmt.Sprintf("0x%x", evt.SslPtr)
 			case 3: // GROUPS_SET
 				if gr != "" { p.groups = append(p.groups, gr) }
 			case 4: // GROUP_SELECTED
@@ -394,6 +422,8 @@ func main() {
 					hs.SNIHash = hashBytes([]byte(hs.SNI), hashSNIMode)
 					hs.SNI = "" // remove plaintext
 				}
+				// If SNI empty but we have stored sniHash (invalid raw), surface it
+				if hs.SNI == "" && hs.SNIHash == "" && p.sni == "" && p.sniHash != "" { hs.SNIHash = p.sniHash }
 				enc, _ := json.Marshal(hs)
 				outf.Write(enc); outf.Write([]byte("\n"))
 				metricsData.HandshakesEmitted++

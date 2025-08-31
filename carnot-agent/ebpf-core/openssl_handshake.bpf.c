@@ -7,6 +7,10 @@
 #define TASK_COMM_LEN 16
 #endif
 enum evt_kind { EVT_HANDSHAKE_RET=1, EVT_SNI_SET=2, EVT_GROUPS_SET=3, EVT_GROUP_SELECTED=4 };
+// Backward-compatible alternate numeric kind for SNI_SET events emitted via SSL_ctrl per new requirement (#define EVT_SNI_SET 3)
+#define EVT_SNI_SET_ALT 3
+// OpenSSL control command constants (subset)
+#define SSL_CTRL_SET_TLSEXT_HOSTNAME 55
 struct event_t {
   __u64 ts_ns; __u32 pid; __u32 tid; char comm[TASK_COMM_LEN];
   __u8 kind; bool success; __u16 _pad; __u64 ssl_ptr;
@@ -30,11 +34,6 @@ SEC("uprobe//libssl.so.3:SSL_do_handshake") int BPF_KPROBE(SSL_do_handshake_ente
 // Many OpenSSL users (e.g., curl via libcurl) invoke SSL_connect instead of SSL_do_handshake directly.
 SEC("uprobe//libssl.so.3:SSL_connect") int BPF_KPROBE(SSL_connect_enter){
   __u64 p=(__u64)PT_REGS_PARM1(ctx); __u32 tid=get_tid(); bpf_map_update_elem(&active_ssl,&tid,&p,BPF_ANY);
-  // Debug/event path confirmation: emit a lightweight SNI_SET event even if SNI not yet set.
-  struct event_t *e=bpf_ringbuf_reserve(&events,sizeof(*e),0); if(!e){ drop_inc(); return 0; }
-  e->ts_ns=bpf_ktime_get_ns(); __u64 pt=bpf_get_current_pid_tgid(); e->pid=pt>>32; e->tid=(__u32)pt; bpf_get_current_comm(&e->comm,sizeof(e->comm));
-  e->kind=EVT_SNI_SET; e->success=false; e->ssl_ptr=p; e->sni[0]='\0'; e->groups[0]='\0'; e->group_id=-1;
-  bpf_ringbuf_submit(e,0); count_inc(0);
   return 0; }
 // Some versions call SSL_connect_ex
 SEC("uprobe//libssl.so.3:SSL_connect_ex") int BPF_KPROBE(SSL_connect_ex_enter){ __u64 p=(__u64)PT_REGS_PARM1(ctx); __u32 tid=get_tid(); bpf_map_update_elem(&active_ssl,&tid,&p,BPF_ANY); return 0; }
@@ -77,6 +76,19 @@ SEC("uprobe//libssl.so.3:SSL_set_tlsext_host_name") int BPF_KPROBE(SSL_set_tlsex
   e->ts_ns=bpf_ktime_get_ns(); __u64 pt=bpf_get_current_pid_tgid(); e->pid=pt>>32; e->tid=(__u32)pt; bpf_get_current_comm(&e->comm,sizeof(e->comm));
   e->kind=EVT_SNI_SET; e->success=false; e->ssl_ptr=(__u64)PT_REGS_PARM1(ctx); bpf_probe_read_user_str(e->sni,sizeof(e->sni),name); e->groups[0]='\0'; e->group_id=-1;
   bpf_ringbuf_submit(e,0); count_inc(0); return 0; }
+// Some applications set SNI via the generic SSL_ctrl interface (e.g., macro wrappers)
+SEC("uprobe//libssl.so.3:SSL_ctrl") int BPF_KPROBE(SSL_ctrl_enter){
+  unsigned long ssl_ptr = (unsigned long)PT_REGS_PARM1(ctx);
+  long cmd = (long)PT_REGS_PARM2(ctx);
+  void *parg = (void*)PT_REGS_PARM4(ctx); // SNI pointer when setting hostname
+  if (cmd == SSL_CTRL_SET_TLSEXT_HOSTNAME && parg) {
+    struct event_t *e=bpf_ringbuf_reserve(&events,sizeof(*e),0); if(!e){ drop_inc(); return 0; }
+    e->ts_ns=bpf_ktime_get_ns(); __u64 pt=bpf_get_current_pid_tgid(); e->pid=pt>>32; e->tid=(__u32)pt; bpf_get_current_comm(&e->comm,sizeof(e->comm));
+  e->kind=EVT_SNI_SET_ALT; e->success=false; e->ssl_ptr=(__u64)ssl_ptr; e->groups[0]='\0'; e->group_id=-1; e->sni[0]='\0';
+    bpf_probe_read_user_str(e->sni,sizeof(e->sni),parg);
+    bpf_ringbuf_submit(e,0); count_inc(0);
+  }
+  return 0; }
 SEC("uprobe//libssl.so.3:SSL_CTX_set1_groups_list") int BPF_KPROBE(SSL_CTX_set1_groups_list_enter){
   const char* str=(const char*)PT_REGS_PARM2(ctx); struct event_t *e=bpf_ringbuf_reserve(&events,sizeof(*e),0); if(!e){ drop_inc(); return 0; }
   e->ts_ns=bpf_ktime_get_ns(); __u64 pt=bpf_get_current_pid_tgid(); e->pid=pt>>32; e->tid=(__u32)pt; bpf_get_current_comm(&e->comm,sizeof(e->comm));
