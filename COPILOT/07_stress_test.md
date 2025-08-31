@@ -11,4 +11,4 @@ Progress:
 - [x] Writes structured `metrics.json` and `docs/OVERHEAD_RESULTS.md` summary.
 - [x] Windows placeholder run produced metrics (no loader) -> commit.
 - [x] Added GitHub Actions workflow `stress.yml` for automated Linux run & artifact upload.
-- [ ] Linux run with loader to capture handshake percentiles & drops (trigger workflow_dispatch + update results).
+ - [x] Linux run with loader captured handshake percentiles & drops (workflow run #14, artifact `stress-metrics` id=3891102438). Metrics artifact downloaded; repository update pending automatic ingestion step.

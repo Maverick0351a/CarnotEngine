@@ -47,5 +47,5 @@
 	- Computes correlation_failure_rate & kernel_drop_rate from loader metrics.
 	- Emits `metrics.json` and markdown summary `docs/OVERHEAD_RESULTS.md`.
 	- Windows placeholder run (no eBPF) recorded baseline (p95=~70ms, p99=~563ms @ ~17 rps).
-	- Pending: Linux run with loader for handshake p95/p99 & kernel drops.
+	- Linux run (GitHub Actions run #14) produced handshake metrics & kernel drop stats (artifact: stress-metrics). Repository docs update in progress.
 - Added GitHub Actions workflow `.github/workflows/stress.yml` to run full Linux stress test (build eBPF + Go loader, run harness, upload metrics artifacts) so we can collect real handshake correlation & kernel drop metrics without needing local Linux host.

@@ -1,5 +1,7 @@
 # CarnotEngine
 
+[![Stress & Overhead (Linux)](https://github.com/Maverick0351a/CarnotEngine/actions/workflows/stress.yml/badge.svg)](https://github.com/Maverick0351a/CarnotEngine/actions/workflows/stress.yml)
+
 > Runtime cryptographic inventory → Policy → Attestation → Continuous PQC migration readiness.
 
 Carnot Engine is the quantum‑safe transition control plane: it discovers where your organization uses cryptography (code, runtime, network, PKI/KMS), quantifies Harvest‑Now‑Decrypt‑Later (HNDL) risk, enforces policy‑as‑code, and produces audit‑ready attestations mapped to mandates (e.g., OMB M‑23‑02, NIST FIPS 203/204/205).
