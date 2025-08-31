@@ -23,7 +23,12 @@ jobs:
         run: |
           set -e
           echo "Verifying token..."
-          curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify | jq . || { echo "Token verify failed"; exit 1; }
+          VERIFY_JSON=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify)
+          echo "$VERIFY_JSON" | jq . || { echo "Token verify failed"; exit 1; }
+          echo "Token Permissions:";
+          echo "$VERIFY_JSON" | jq -r '.result.policies[]?.permission_groups[]?.name' || true
+          if ! echo "$VERIFY_JSON" | jq -r '.result.policies[]?.permission_groups[]?.name' | grep -qi 'Cloudflare Pages'; then
+            echo 'ERROR: Token missing Cloudflare Pages permission (Pages:Edit required).'; exit 2; fi
           echo "Listing accounts (expect your target ID: $CLOUDFLARE_ACCOUNT_ID)" 
           curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" https://api.cloudflare.com/client/v4/accounts | jq '.result[] | {name,id}'
           echo "Attempt listing existing Pages projects (ok if empty first time)" 
