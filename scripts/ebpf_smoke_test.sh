@@ -12,11 +12,11 @@ MODE="normal" # or small
 DURATION="20s"
 CONCURRENCY=100
 LOADER_EXTRA_ARGS="${LOADER_EXTRA_ARGS:-}"
-LOADGEN="curl"  # curl (default, uses OpenSSL), hey (Go TLS, no uprobes), or openssl (uses s_client loop)
+LOADGEN="curl"  # curl (default, uses OpenSSL), hey (Go TLS, no uprobes), openssl (public endpoint), or openssl_local (local s_server)
 TARGET_URL="https://example.org"
 
 usage(){ cat <<EOF
-Usage: $0 [-m normal|small] [-d duration] [-c concurrency] [-g curl|hey|openssl] [-u url]
+Usage: $0 [-m normal|small] [-d duration] [-c concurrency] [-g curl|hey|openssl|openssl_local] [-u url]
   -m  Ring buffer mode: normal (512KiB) or small (32KiB w/ expected drops)
   -d  Load generation duration (default 20s)
   -c  Concurrency for hey (default 100)
@@ -41,7 +41,7 @@ command -v bpftool >/dev/null || { echo "bpftool required"; exit 1; }
 command -v go >/dev/null || { echo "go toolchain required"; exit 1; }
 if [ "$LOADGEN" = "hey" ]; then
   command -v hey >/dev/null || { echo "hey required (go install github.com/rakyll/hey@latest)"; exit 1; }
-elif [ "$LOADGEN" = "openssl" ]; then
+elif [ "$LOADGEN" = "openssl" ] || [ "$LOADGEN" = "openssl_local" ]; then
   command -v openssl >/dev/null || { echo "openssl required"; exit 1; }
 else
   command -v curl >/dev/null || { echo "curl required"; exit 1; }
@@ -59,7 +59,7 @@ resolve_libssl() {
   echo "$p"
 }
 GEN_BIN="curl"
-if [ "$LOADGEN" = "openssl" ]; then GEN_BIN="openssl"; fi
+if [ "$LOADGEN" = "openssl" ] || [ "$LOADGEN" = "openssl_local" ]; then GEN_BIN="openssl"; fi
 LIBSSL_PATH="$(resolve_libssl "$GEN_BIN")" || { echo "[!] Failed to resolve libssl; aborting"; exit 1; }
 echo "[*] Resolved libssl: $LIBSSL_PATH"
 
@@ -136,6 +136,30 @@ if [ "$LOADGEN" = "hey" ]; then
   else
     hey -z "$DURATION" -c "$CONCURRENCY" -disable-keepalive "$TARGET_URL" || true
   fi
+elif [ "$LOADGEN" = "openssl_local" ]; then
+  # Local OpenSSL server & client hammer (no egress; deterministic)
+  TMP_SSL_DIR=$(mktemp -d)
+  pushd "$TMP_SSL_DIR" >/dev/null
+  echo "[*] Generating throwaway self-signed cert for local server"
+  openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 1 -nodes -subj "/CN=localhost" >/dev/null 2>&1
+  echo "[*] Starting local openssl s_server on 127.0.0.1:8443"
+  openssl s_server -quiet -accept 8443 -cert cert.pem -key key.pem >/dev/null 2>&1 &
+  SERVER_PID=$!
+  popd >/dev/null
+  trap 'kill $SERVER_PID 2>/dev/null || true; rm -rf "$TMP_SSL_DIR"' EXIT
+  sleep 1
+  echo "[*] Hammering local server with openssl s_client (duration $DURATION concurrency $CONCURRENCY)"
+  total_s=${DURATION%s}; [ "$total_s" -lt 1 ] && total_s=1
+  end=$(( $(date +%s) + total_s ))
+  iter=0
+  while [ $(date +%s) -lt $end ]; do
+    iter=$((iter+1))
+    seq 1 $CONCURRENCY | xargs -P "$CONCURRENCY" -I{} bash -c 'timeout 2s openssl s_client -connect 127.0.0.1:8443 -servername localhost </dev/null >/dev/null 2>&1 || true'
+    if (( iter % 5 == 0 )); then echo "[*] openssl_local loop iteration $iter"; fi
+  done
+  # Give the server a moment to finish any final handshakes
+  sleep 1
+  kill $SERVER_PID 2>/dev/null || true
 else
   if [ "$MODE" = "small" ]; then
     gen_with_curl_small
@@ -168,3 +192,22 @@ fi
 
 echo "[*] Done. Handshake samples:"
 head -n 5 "$OUT_JSON" || true
+
+# Basic acceptance checks (non-fatal warnings)
+if [ -f "$OUT_JSON" ]; then
+  HS_LINES=$(grep -c '"success"' "$OUT_JSON" || true)
+  if [ "$HS_LINES" -lt 5 ]; then
+    echo "[!] Warning: fewer than 5 handshake lines observed ($HS_LINES)"
+  else
+    echo "[*] Handshake lines observed: $HS_LINES"
+  fi
+fi
+if [ -f "$METRICS_JSON" ]; then
+  EV=$(jq -r '.eventsReceived // 0' "$METRICS_JSON" 2>/dev/null || echo 0)
+  HE=$(jq -r '.handshakesEmitted // 0' "$METRICS_JSON" 2>/dev/null || echo 0)
+  if [ "$EV" -eq 0 ] || [ "$HE" -eq 0 ]; then
+    echo "[!] Warning: eventsReceived=$EV handshakesEmitted=$HE (expected >0)"
+  else
+    echo "[*] Metrics OK: eventsReceived=$EV handshakesEmitted=$HE"
+  fi
+fi
