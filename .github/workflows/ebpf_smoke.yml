@@ -20,7 +20,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            clang llvm make jq curl openssl binutils build-essential pkg-config libelf-dev libbpf-dev bpftool
+            clang llvm make jq curl openssl binutils build-essential pkg-config libelf-dev libbpf-dev git ca-certificates
+          # Build bpftool from source (apt package may be unavailable)
+          git clone --depth 1 https://github.com/libbpf/bpftool.git /tmp/bpftool
+          make -C /tmp/bpftool/src
+          sudo make -C /tmp/bpftool/src install
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
