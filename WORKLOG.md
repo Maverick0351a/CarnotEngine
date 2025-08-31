@@ -58,3 +58,9 @@
 	- Added `docs/ASSESSMENT_TEMPLATE.md` with logo/contact placeholders and structured sections (executive summary, findings, roadmap).
 	- Added `docs/EMAIL_OUTREACH.md` including target list table (10 slots), initial + follow-up email templates, and metrics tracking.
 	- Next: generate branded PDF to `docs/sales/` and record outreach metrics after sending.
+- Task 10 (WORKLOG Enforcement):
+	- Added `.github/workflows/worklog-check.yml` to enforce WORKLOG.md change or `worklog-bypass` label; skips draft PRs.
+- Task 11 (E2E & Release Bundle):
+	- Added `scripts/build_release_bundle.sh` (Linux) and `scripts/build_release_bundle.ps1` (Windows) bundling `artifacts/assessment-*/` into `dist/` with manifest.
+	- Release workflow updated to run minimal assessment (skip eBPF/AWS) and build bundles on tag `v*.*.*` before publishing GitHub Release.
+	- Pending: tag `v0.1.0` to validate release artifact upload.

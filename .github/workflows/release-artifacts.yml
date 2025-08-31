@@ -7,9 +7,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build bundle placeholder
+      - name: Install OPA
         run: |
-          mkdir -p dist && echo "bundle" > dist/placeholder.txt
+          curl -L -o opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64
+          chmod +x opa
+          sudo mv opa /usr/local/bin/opa
+      - name: Run assessment (E2E minimal)
+        env:
+          SKIP_EBPF: 1
+          SKIP_AWS: 1
+        run: |
+          bash scripts/run_assessment.sh
+      - name: Build release bundles
+        run: |
+          chmod +x scripts/build_release_bundle.sh || true
+          bash scripts/build_release_bundle.sh
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
