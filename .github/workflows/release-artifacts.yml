@@ -3,6 +3,8 @@ on:
   push:
     tags: ['v*.*.*']
   workflow_dispatch: {}
+permissions:
+  contents: write  # needed to create GitHub Releases (403 without this)
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -29,3 +31,5 @@ jobs:
           files: dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # If org settings restrict default GITHUB_TOKEN, define a PAT secret (e.g. GH_PAT) with repo scope
+          # and replace above with: GITHUB_TOKEN: ${{ secrets.GH_PAT }}
