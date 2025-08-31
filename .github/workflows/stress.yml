@@ -27,29 +27,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install deps (with bpftool)
+      - name: Install base deps
         run: |
           set -e
           sudo apt-get update
-          sudo apt-get install -y software-properties-common
-          sudo add-apt-repository universe -y
-          sudo apt-get update
-          if ! sudo apt-get install -y bpftool; then
-            echo "bpftool package unavailable, building from source (pin v7.3.0)...";
-            sudo apt-get install -y git build-essential libelf-dev zlib1g-dev clang llvm make pkg-config
-            BPFTOOL_TAG="v7.3.0"
-            if ! git clone --depth 1 --branch "$BPFTOOL_TAG" https://github.com/libbpf/bpftool.git /tmp/bpftool-src; then
-              echo "Tag $BPFTOOL_TAG not found, cloning main as fallback";
-              git clone --depth 1 https://github.com/libbpf/bpftool.git /tmp/bpftool-src
-            fi
-            git -C /tmp/bpftool-src submodule update --init --recursive || true
-            make -C /tmp/bpftool-src/src V=1
-            sudo cp /tmp/bpftool-src/src/bpftool /usr/local/bin/
-            bpftool version || true
-          fi
-          sudo apt-get install -y clang llvm make golang-go jq libbpf-dev linux-headers-$(uname -r)
+          sudo apt-get install -y clang llvm make golang-go jq libbpf-dev linux-headers-$(uname -r) git build-essential libelf-dev zlib1g-dev pkg-config
           go install github.com/rakyll/hey@latest
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+      - name: Setup bpftool (composite action)
+        uses: ./.github/actions/setup-bpftool
+        with:
+          version: v7.3.0
       - name: Go module tidy (generate go.sum)
         run: |
           cd carnot-agent/ebpf-core/go-loader

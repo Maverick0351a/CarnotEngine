@@ -17,26 +17,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install deps
+      - name: Install base deps
         run: |
           set -e
           sudo apt-get update
-          sudo apt-get install -y clang llvm make git jq libbpf-dev linux-headers-$(uname -r) build-essential libelf-dev zlib1g-dev
-          if ! sudo apt-get install -y bpftool; then
-            echo "bpftool pkg fallback build (pin v7.3.0)";
-            BPFTOOL_TAG="v7.3.0"
-            if ! git clone --depth 1 --branch "$BPFTOOL_TAG" https://github.com/libbpf/bpftool.git /tmp/bpftool-src; then
-              echo "Tag $BPFTOOL_TAG not found, cloning main as fallback";
-              git clone --depth 1 https://github.com/libbpf/bpftool.git /tmp/bpftool-src
-            fi
-            git -C /tmp/bpftool-src submodule update --init --recursive || true
-            make -C /tmp/bpftool-src/src V=1
-            sudo cp /tmp/bpftool-src/src/bpftool /usr/local/bin/
-            bpftool version || true
-          fi
-          sudo apt-get install -y golang-go
+          sudo apt-get install -y clang llvm make git jq libbpf-dev linux-headers-$(uname -r) build-essential libelf-dev zlib1g-dev golang-go
           go install github.com/rakyll/hey@latest
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+      - name: Setup bpftool (composite action)
+        uses: ./.github/actions/setup-bpftool
+        with:
+          version: v7.3.0
       - name: Go mod tidy
         run: |
           cd carnot-agent/ebpf-core/go-loader
@@ -45,6 +36,16 @@ jobs:
         run: bash scripts/ebpf_smoke_test.sh -m normal -d 10s -c 50
       - name: Small ring buffer run (expect drops)
         run: bash scripts/ebpf_smoke_test.sh -m small -d 10s -c 50
+      - name: Assert drop behavior
+        run: |
+          echo "Asserting drop expectations from small ring buffer test"
+          if [ ! -f integrations/runtime/metrics.json ]; then echo "metrics.json missing"; exit 1; fi
+          cat integrations/runtime/metrics.json
+          DROPS=$(jq -r '.kernel_drops // 0' integrations/runtime/metrics.json)
+          RATE=$(jq -r '.kernel_drop_rate // 0' integrations/runtime/metrics.json)
+          if [ "$DROPS" -eq 0 ]; then echo "Expected >0 kernel_drops in SMALL_RB run"; exit 1; fi
+          if (( $(echo "$RATE <= 0" | bc -l) )); then echo "Expected positive kernel_drop_rate"; exit 1; fi
+          echo "OK: kernel_drops=$DROPS kernel_drop_rate=$RATE"
       - name: Collect artifacts
         run: |
           mkdir -p smoke-artifacts

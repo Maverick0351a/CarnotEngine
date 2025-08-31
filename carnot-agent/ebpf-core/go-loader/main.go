@@ -107,7 +107,6 @@ func main() {
 
 	events := coll.Maps["events"]
 	if events == nil { log.Fatalf("events ringbuf not found") }
-	counters := coll.Maps["counters"] // may be nil if older BPF object; tolerate
 	dropCounters := coll.Maps["drop_counters"] // new map for ringbuf reserve drops
 
 	exe, err := link.OpenExecutable(libssl)

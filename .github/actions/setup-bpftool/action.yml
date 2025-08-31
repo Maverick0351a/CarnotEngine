@@ -1,0 +1,63 @@
+name: "Setup bpftool (cache + fallback build)"
+description: "Installs bpftool via apt or builds pinned tag with caching and checksum logging"
+inputs:
+  version:
+    description: "bpftool tag to clone if apt install unavailable"
+    required: false
+    default: "v7.3.0"
+runs:
+  using: "composite"
+  steps:
+    - name: Restore cached built bpftool
+      id: cache-bpftool
+      uses: actions/cache@v3
+      with:
+        path: .bpftool-cache/${{ inputs.version }}
+        key: bpftool-${{ runner.os }}-${{ inputs.version }}-v1
+    - name: Use cached bpftool if present
+      if: ${{ steps.cache-bpftool.outputs.cache-hit == 'true' }}
+      shell: bash
+      run: |
+        set -e
+        ls -l .bpftool-cache/${{ inputs.version }} || { echo "Cache directory missing"; exit 1; }
+        sudo cp .bpftool-cache/${{ inputs.version }}/bpftool /usr/local/bin/
+        sudo chmod +x /usr/local/bin/bpftool
+        echo "Cached bpftool version:" $(bpftool version || echo 'unknown')
+    - name: Attempt apt install bpftool
+      if: ${{ steps.cache-bpftool.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        set -e
+        if sudo apt-get update && sudo apt-get install -y bpftool; then
+          echo "Apt-installed bpftool:" $(bpftool version || true)
+          mkdir -p .bpftool-cache/${{ inputs.version }}
+          sudo cp $(command -v bpftool) .bpftool-cache/${{ inputs.version }}/bpftool
+        else
+          echo "bpftool apt package not available; will build from source"
+        fi
+    - name: Build bpftool from source (fallback)
+      if: ${{ steps.cache-bpftool.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        set -e
+        if command -v bpftool >/dev/null 2>&1; then
+          echo "bpftool already present (apt), skipping source build"; exit 0; fi
+        ver='${{ inputs.version }}'
+        echo "Building bpftool tag $ver"
+        git clone --depth 1 --branch "$ver" https://github.com/libbpf/bpftool.git /tmp/bpftool-src || {
+          echo "Tag $ver not found; cloning main"; git clone --depth 1 https://github.com/libbpf/bpftool.git /tmp/bpftool-src; }
+        git -C /tmp/bpftool-src submodule update --init --recursive || true
+        make -C /tmp/bpftool-src/src V=1
+        sudo cp /tmp/bpftool-src/src/bpftool /usr/local/bin/
+        sudo chmod +x /usr/local/bin/bpftool
+        mkdir -p .bpftool-cache/${{ inputs.version }}
+        cp /usr/local/bin/bpftool .bpftool-cache/${{ inputs.version }}/bpftool
+        echo "Built bpftool version:" $(bpftool version || true)
+    - name: Compute checksum & verify executable
+      shell: bash
+      run: |
+        set -e
+        if ! command -v bpftool >/dev/null; then echo "bpftool not installed"; exit 1; fi
+        sha256sum $(command -v bpftool) | tee bpftool.sha256
+        echo "bpftool path $(command -v bpftool)"
+        file $(command -v bpftool) || true

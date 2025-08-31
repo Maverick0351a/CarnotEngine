@@ -72,3 +72,9 @@
 	- Added workflow `permissions: contents: write` and re-tagged `v0.1.4` → SUCCESS: release published with `assessment-<timestamp>.zip` + `assessments_manifest.json` assets.
 	- Visualization step previously errored (missing matplotlib); dependency now added so future releases include PNG charts.
 	- Next: Enrich release notes body (auto-generate summary + violation counts) and include SHA256 of bundle in manifest for integrity.
+
+- Hardening (bpftool provisioning & eBPF CI):
+	- Added composite action `.github/actions/setup-bpftool` (apt install → pinned tag v7.3.0 → fallback to main) with caching + checksum emission.
+	- Refactored `.github/workflows/ebpf-smoke.yml` & `stress.yml` to use composite action (reduces duplication & drift risk).
+	- Added assertion step in smoke workflow to ensure SMALL_RB mode produces >0 `kernel_drops` and positive `kernel_drop_rate`.
+	- Future: add normal-mode guard (expect 0 drops) by splitting metrics capture per mode; consider archiving bpftool sha256 in artifact for supply-chain attestation.
